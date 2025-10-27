@@ -10,6 +10,7 @@ from celery import Celery
 from celery.schedules import schedule as celery_schedule
 
 from .settings import CollectionSchedule, Settings, get_settings
+from .utils.logging import configure_logging
 
 _CELERY_APP: Celery | None = None
 
@@ -17,7 +18,7 @@ _CELERY_APP: Celery | None = None
 def create_celery_app(settings: Settings | None = None) -> Celery:
     """설정을 기반으로 Celery 인스턴스를 생성한다."""
     config = settings or get_settings()
-    _configure_logging(config.structlog_level)
+    configure_logging(config.structlog_level, json_enabled=config.log_json)
 
     app = Celery("ingestion", broker=config.redis_url, backend=config.redis_url)
     app.conf.update(
@@ -66,9 +67,9 @@ def _build_schedule_name(item: CollectionSchedule, index: int) -> str:
     return f"collect.{item.source}.{item.ticker.lower()}.{index}"
 
 
-def _configure_logging(level_name: str) -> None:
-    level = getattr(logging, level_name.upper(), logging.INFO)
-    logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+def _configure_logging(level_name: str) -> None:  # backward-compat shim
+    # Kept for compatibility; delegate to new utility without JSON.
+    configure_logging(level_name, json_enabled=False)
 
 
 def _install_signal_handlers(app: Celery) -> None:
@@ -83,4 +84,3 @@ def _install_signal_handlers(app: Celery) -> None:
     @signals.worker_shutdown.connect  # type: ignore[attr-defined]
     def _on_worker_shutdown(sender=None, **kwargs):  # noqa: ANN001
         logger.info("Celery worker shutdown detected", extra={"sender": sender})
-

@@ -16,18 +16,21 @@
   - 브로커/백엔드: Redis(URI는 INGESTION_REDIS_URL 환경 변수).
   - Task 자동 등록: ingestion.tasks 패키지 하위 모듈을 import하여 Discover.
   - Beat 스케줄: settings.COLLECTION_SCHEDULES(ticker, source, interval)로부터 동적 생성.
-- 초기화 시 로깅 설정(structlog)과 Sentry/추후 관찰성 훅을 연결할 수 있는 hook 제공.
+- 초기화 시 로깅 설정(STRUCTLOG_LEVEL, LOG_JSON)과 Sentry/추후 관찰성 훅을 연결할 수 있는 hook 제공.
 - Graceful shutdown을 위해 signal handler에서 현재 진행 중인 작업을 안전히 종료하고 JobRun을 업데이트한다.
 - 구성 로드 실패, 브로커 연결 실패 시 구체적인 예외 메시지와 종료 코드를 남긴다.
 
 ## 모듈 구성 요약
 - ingestion/settings.py: Pydantic BaseSettings 기반 구성. 필수 키: NEWS_API_KEY, SNS_FEED_URLS, POSTGRES_DSN, LOCAL_STORAGE_ROOT, DEFAULT_LOCALE 등.
 - ingestion/celery_app.py: Celery 인스턴스 팩토리 + Beat 스케줄 로더.
+  - 로깅: `utils/logging.configure_logging(level, json_enabled)` 사용
 - ingestion/tasks/collect.py: 주요 Celery 태스크(collect_articles_for_ticker, fanout_collection_jobs).
+  - trace_id 생성/전파, 수집/저장 이벤트 구조화 로깅
 - ingestion/connectors/base.py: 커넥터 인터페이스(fetch(params) -> list[RawArticleDTO]) 및 오류 계층.
 - ingestion/connectors/news_api.py, ingestion/connectors/rss.py: 옵션 A 기반 구현.
 - ingestion/services/normalizer.py: 텍스트 정규화, 언어 감지, hash 생성.
 - ingestion/services/deduplicator.py: Redis + DB를 사용한 중복 검사.
+  - KeyStore 구현: InMemory(기본), RedisKeyStore(redis-py 사용 가능 시 자동 사용)
 - ingestion/repositories/articles.py: SQLAlchemy 세션을 이용한 RawArticle/JobRun 저장.
 - ingestion/models/domain.py: DTO 및 Enum 정의.
 - ingestion/db/models.py: SQLAlchemy ORM 모델 정의.
@@ -76,10 +79,12 @@ ingestion/
 
 ## 외부 의존성 & 구성
 - Redis: Celery 브로커 + dedup cache(INGESTION_REDIS_URL, DEDUP_REDIS_TTL 기본 24h).
+  - redis-py 미설치/연결 실패 시 인메모리 키스토어로 자동 폴백
 - PostgreSQL: SQLAlchemy + Alembic(POSTGRES_DSN, DB_POOL_SIZE, DB_MAX_OVERFLOW).
 - Local storage: 원문 보관(LOCAL_STORAGE_ROOT; 기본값 `./var/storage`).
 - Secrets: 기본은 환경 변수, 로컬 개발은 .env + python-dotenv 로딩, 배포 환경은 Secret Manager 연동 TODO.
 - 로깅: STRUCTLOG_LEVEL, LOG_JSON 플래그.
+  - LOG_JSON=true 시 JSON 포맷 로그 출력, 기본은 텍스트
 
 ## 개발/테스트 체크리스트
 - 설정: 필수 환경 변수 미설정 시 의미 있는 ValidationError를 발생시키고 테스트한다.

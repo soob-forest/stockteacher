@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Callable, Iterable, List
+import uuid
 
 from celery import shared_task
 from sqlalchemy import select
@@ -15,7 +16,9 @@ from ingestion.repositories.articles import (
     get_existing_fingerprints,
     save_articles,
 )
-from ingestion.services.deduplicator import InMemoryKeyStore
+from ingestion.services.deduplicator import InMemoryKeyStore, RedisKeyStore
+from ingestion.settings import get_settings
+from ingestion.utils.logging import get_logger
 
 
 # Connector factory is kept pluggable for tests; it must return an object with .fetch(ticker).
@@ -58,14 +61,52 @@ def collect_core(ticker: str, source: str) -> int:
     """Core logic to collect and persist articles; test-friendly."""
     _ensure_schema()
     connector = _get_connector(source)
+    trace_id = str(uuid.uuid4())
+    logger = get_logger(__name__)
+    logger.info(
+        "collect.start",
+        extra={"trace_id": trace_id, "ticker": ticker, "source": source},
+    )
     with session_scope() as session, JobRunRecorder(
-        session, ticker=ticker, source=source, task_name="collect_articles_for_ticker"
+        session, ticker=ticker, source=source, task_name="collect_articles_for_ticker", trace_id=trace_id
     ):
         fetched: List[RawArticleDTO] = connector.fetch(ticker)
-        # In-memory/Redis-like dedupe first
-        keystore = InMemoryKeyStore()
+        # Dedupe: prefer RedisKeyStore if redis-py is available; fallback to in-memory
+        keystore = _build_keystore(logger)
         unique = _dedupe_with_keystore(fetched, keystore)
-        return _persist_new_articles(session, source, ticker, unique)
+        saved = _persist_new_articles(session, source, ticker, unique)
+        logger.info(
+            "collect.saved",
+            extra={
+                "trace_id": trace_id,
+                "ticker": ticker,
+                "source": source,
+                "fetched": len(fetched),
+                "unique": len(unique),
+                "saved": saved,
+            },
+        )
+        return saved
+
+
+def _build_keystore(logger) -> InMemoryKeyStore | RedisKeyStore:
+    settings = get_settings()
+    try:
+        import redis as redislib  # type: ignore
+
+        client = redislib.Redis.from_url(settings.redis_url, socket_connect_timeout=0.2)
+        # 연결 확인; 실패 시 폴백
+        try:
+            client.ping()
+        except Exception:
+            logger.info("dedupe.keystore.memory", extra={"reason": "redis_ping_failed"})
+            return InMemoryKeyStore()
+        ks = RedisKeyStore(client, prefix="dedup", default_ttl_seconds=int(settings.dedup_redis_ttl_seconds))
+        logger.info("dedupe.keystore.redis", extra={"redis_url": settings.redis_url})
+        return ks
+    except Exception:  # pragma: no cover - best-effort fallback when redis-py is absent/unavailable
+        logger.info("dedupe.keystore.memory", extra={"reason": "redis_lib_unavailable"})
+        return InMemoryKeyStore()
 
 
 @shared_task(name="ingestion.tasks.collect.collect_articles_for_ticker")

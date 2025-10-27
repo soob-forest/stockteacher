@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     )
     default_locale: str = Field("ko_KR", alias="DEFAULT_LOCALE", description="기본 로케일.")
     structlog_level: str = Field("INFO", alias="STRUCTLOG_LEVEL", description="구조화 로그 레벨.")
+    log_json: bool = Field(False, alias="LOG_JSON", description="로그를 JSON 형식으로 출력할지 여부.")
     collection_schedules: List[CollectionSchedule] = Field(
         default_factory=list,
         alias="COLLECTION_SCHEDULES",

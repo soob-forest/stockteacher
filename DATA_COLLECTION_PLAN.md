@@ -23,7 +23,7 @@
 - [x] Step 3 — SQLAlchemy 모델(RawArticle, JobRun)과 Alembic 베이스라인 마이그레이션 작성, 마이그레이션 검증 테스트.
 - [x] Step 4 — 커넥터 추상화 및 News API + RSS 커넥터 구현, 응답 정규화·재시도/중복 방지 유닛 테스트.
 - [x] Step 5 — 수집 태스크(Celery) 및 JobRun 기록 로직 구현, Redis/DB 기반 중복 제거 로직 테스트.
-- [ ] Step 6 — 구조화 로깅/메트릭 훅 추가, docker-compose/README/Runbook 갱신과 운영 체크리스트 작성.
+- [x] Step 6 — 구조화 로깅/메트릭 훅 추가, docker-compose/README/Runbook 갱신과 운영 체크리스트 작성.
 
 ## 리스크 & 대응
 - **Rate Limit 초과**: 지수적 백오프 + 캐시, 실패 시 JobRun 기록과 알림 훅으로 모니터링.
@@ -32,4 +32,4 @@
 - **비밀 관리**: 환경변수/시크릿 매니저 사용, 로그에는 민감 정보 제거.
 
 ## 완료 체크
-- [ ] 모든 체크 항목 완료 후 최종 검토 및 사용자 보고.
+- [x] 모든 체크 항목 완료 후 최종 검토 및 사용자 보고.

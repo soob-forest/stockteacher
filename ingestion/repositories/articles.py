@@ -40,7 +40,15 @@ def save_articles(session: Session, items: Sequence[RawArticleDTO]) -> int:
 class JobRunRecorder:
     """Context manager to record job run lifecycle."""
 
-    def __init__(self, session: Session, *, ticker: str | None, source: str | None, task_name: str) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        ticker: str | None,
+        source: str | None,
+        task_name: str,
+        trace_id: str | None = None,
+    ) -> None:
         self._session = session
         self._job = JobRun(
             stage=JobStage.COLLECT,
@@ -48,6 +56,7 @@ class JobRunRecorder:
             ticker=ticker,
             source=source,
             task_name=task_name,
+            trace_id=trace_id,
             started_at=datetime.now(timezone.utc),
         )
 
