@@ -56,6 +56,16 @@ class Settings(BaseSettings):
 
     redis_url: str = Field(..., alias="INGESTION_REDIS_URL", description="Celery 브로커/백엔드 Redis DSN.")
     news_api_key: Optional[SecretStr] = Field(None, alias="NEWS_API_KEY", description="뉴스 API 인증 키.")
+    news_api_endpoint: str = Field(
+        "https://newsapi.org/v2/everything",
+        alias="NEWS_API_ENDPOINT",
+        description="News API 엔드포인트",
+    )
+    news_api_timeout_seconds: PositiveInt = Field(5, alias="NEWS_API_TIMEOUT_SECONDS", description="News API 타임아웃(초)")
+    news_api_max_retries: PositiveInt = Field(2, alias="NEWS_API_MAX_RETRIES", description="News API 최대 재시도")
+    news_api_page_size: PositiveInt = Field(20, alias="NEWS_API_PAGE_SIZE", description="News API 페이지 크기(≤100)")
+    news_api_lang: str = Field("ko", alias="NEWS_API_LANG", description="News API 언어 필터")
+    news_api_sort_by: str = Field("publishedAt", alias="NEWS_API_SORT_BY", description="정렬 기준")
     sns_feed_urls: List[str] = Field(default_factory=list, alias="SNS_FEED_URLS", description="SNS RSS/피드 URL 목록.")
     postgres_dsn: str = Field(..., alias="POSTGRES_DSN", description="PostgreSQL 연결 문자열.")
     local_storage_root: str = Field(
@@ -141,6 +151,13 @@ class Settings(BaseSettings):
         if "://" not in value:
             raise ValueError("POSTGRES_DSN은 유효한 DSN 문자열이어야 합니다.")
         return value
+
+    @field_validator("news_api_page_size")
+    @classmethod
+    def _validate_page_size(cls, v: int) -> int:
+        if v > 100:
+            raise ValueError("NEWS_API_PAGE_SIZE는 100 이하여야 합니다.")
+        return v
 
 
 @lru_cache()

@@ -72,6 +72,12 @@ StockTeacher — Slack 주식 리포트 봇 (MVP)
   - 비용 상한 초과 시 Permanent 에러 처리, JobRun FAILED 기록
   - JSON 파싱 실패/타임아웃은 재시도 후 실패 처리, 원인 이벤트로 구분
 
+실데이터 수집 스모크 테스트(NewsAPI)
+- 사전 준비: `.env`에 `NEWS_API_KEY` 설정(그 외 기본값 사용 가능).
+- 실행: `uv run -- python -m scripts.test_news_api -t AAPL -n 3  --attempts 2`
+  - 출력: 설정 요약 + 수집 개수 + 상위 N건 제목/URL
+  - 오류: 401/403(키 문제), 429(레이트리밋), 타임아웃 시 `NEWS_API_TIMEOUT_SECONDS` 상향 및 `NEWS_API_PAGE_SIZE` 축소 권장
+
 Redis 사용 가이드(중복 제거 저장소)
 - 목적: 수집 단계에서 기사 fingerprint 기반의 중복 저장을 방지합니다.
 - 활성화 조건: `redis` 파이썬 패키지가 설치되어 있고 `INGESTION_REDIS_URL`이 설정되어 있으면 RedisKeyStore를 자동 사용합니다. 그렇지 않으면 인메모리로 폴백합니다.
