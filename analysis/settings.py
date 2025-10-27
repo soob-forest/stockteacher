@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import Field, PositiveFloat, PositiveInt, ValidationError
+from pydantic import Field, PositiveFloat, PositiveInt, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +34,14 @@ class AnalysisSettings(BaseSettings):
     analysis_retry_max_attempts: PositiveInt = Field(2, alias="ANALYSIS_RETRY_MAX_ATTEMPTS", description="Max retry attempts")
     default_locale: str = Field("ko_KR", alias="DEFAULT_LOCALE", description="Default locale for prompts")
 
+    @field_validator("openai_api_key")
+    @classmethod
+    def _non_empty_api_key(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("OPENAI_API_KEY는 공백일 수 없습니다.")
+        return s
+
 
 @lru_cache()
 def get_analysis_settings() -> AnalysisSettings:
@@ -45,4 +53,3 @@ def get_analysis_settings() -> AnalysisSettings:
 
 def reset_analysis_settings_cache() -> None:
     get_analysis_settings.cache_clear()  # type: ignore[attr-defined]
-

@@ -43,7 +43,7 @@ def test_get_analysis_settings_reads_env(monkeypatch):
 
 
 def test_missing_api_key_raises(monkeypatch):
-    # Do not set OPENAI_API_KEY
+    # Ensure OPENAI_API_KEY invalid/empty
+    monkeypatch.setenv("OPENAI_API_KEY", " ")
     with pytest.raises(RuntimeError):
         get_analysis_settings()
-

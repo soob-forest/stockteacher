@@ -21,8 +21,8 @@
 
 ## 실행 계획(체크리스트)
 - [x] Step A — 분석 Settings 정의(OPENAI_API_KEY, 모델, 최대 토큰/비용 상한, 타임아웃, 재시도, 언어/톤 설정). 단위 테스트.
-- [ ] Step B — DTO/스키마 정의(AnalysisInput, AnalysisResult; summary, keywords[], sentiment_score, anomalies[], llm_model, tokens_prompt, tokens_completion, cost).
-- [ ] Step C — 프롬프트 템플릿과 프롬프트 빌더(입력 정규화/언어/톤/길이 제한). 결정적 테스트.
+- [x] Step B — DTO/스키마 정의(AnalysisInput, AnalysisResult; summary, keywords[], sentiment_score, anomalies[], llm_model, tokens_prompt, tokens_completion, cost).
+- [x] Step C — 프롬프트 템플릿과 프롬프트 빌더(입력 정규화/언어/톤/길이 제한). 결정적 테스트.
 - [ ] Step D — OpenAI 클라이언트 래퍼(재시도/타임아웃/관찰성/비용 추적/구조화 출력 파서). Fake Provider 기반 테스트.
 - [ ] Step E — 리포지토리/마이그레이션(ProcessedInsight 저장, llm_* 메타 저장). 스모크 테스트.
 - [ ] Step F — Celery 태스크(analyze_articles_for_ticker): 배치/청크/레이트 제한, JobRun 기록, 에러/재시도. 성공/실패 경로 테스트.
