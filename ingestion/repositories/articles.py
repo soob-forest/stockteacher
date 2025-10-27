@@ -44,6 +44,7 @@ class JobRunRecorder:
         self,
         session: Session,
         *,
+        stage: JobStage = JobStage.COLLECT,
         ticker: str | None,
         source: str | None,
         task_name: str,
@@ -51,7 +52,7 @@ class JobRunRecorder:
     ) -> None:
         self._session = session
         self._job = JobRun(
-            stage=JobStage.COLLECT,
+            stage=stage,
             status=JobStatus.RUNNING,
             ticker=ticker,
             source=source,

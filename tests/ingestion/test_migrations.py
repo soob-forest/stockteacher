@@ -31,13 +31,16 @@ def test_migrations_create_expected_tables(sqlite_url: str) -> None:
     inspector = inspect(engine)
 
     tables = set(inspector.get_table_names())
-    assert {"raw_articles", "job_runs"}.issubset(tables)
+    assert {"raw_articles", "job_runs", "processed_insights"}.issubset(tables)
 
     raw_columns = {column["name"] for column in inspector.get_columns("raw_articles")}
     assert {"ticker", "fingerprint", "collected_at"}.issubset(raw_columns)
 
     job_columns = {column["name"] for column in inspector.get_columns("job_runs")}
     assert {"stage", "status", "retry_count"}.issubset(job_columns)
+
+    pi_columns = {column["name"] for column in inspector.get_columns("processed_insights")}
+    assert {"ticker", "summary_text", "llm_model", "llm_cost"}.issubset(pi_columns)
 
 
 def test_models_roundtrip(sqlite_url: str) -> None:
@@ -58,13 +61,30 @@ def test_models_roundtrip(sqlite_url: str) -> None:
             language="ko",
         )
         job = JobRun(stage=JobStage.COLLECT, status=JobStatus.RUNNING, task_name="collect_articles")
+        # Insert minimal processed insight row as well
+        from ingestion.db.models import ProcessedInsight
 
-        session.add_all([article, job])
+        pi = ProcessedInsight(
+            ticker="AAPL",
+            summary_text="Summary",
+            keywords=["apple", "earnings"],
+            sentiment_score=0.1,
+            anomalies=[],
+            source_refs=None,
+            llm_model="gpt-4o-mini",
+            llm_tokens_prompt=10,
+            llm_tokens_completion=5,
+            llm_cost=0.0001,
+        )
+
+        session.add_all([article, job, pi])
         session.commit()
         session.refresh(article)
         session.refresh(job)
+        session.refresh(pi)
         session.expunge(article)
         session.expunge(job)
+        session.expunge(pi)
 
     assert article.id is not None
     assert article.created_at is not None

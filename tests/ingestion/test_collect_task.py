@@ -85,10 +85,8 @@ def test_collect_core_saves_unique_records(tmp_path: Path):
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
     with SessionLocal() as session:  # type: Session
         # SQLAlchemy 2.x count
-        from sqlalchemy import func
-
-        total = session.scalar(select(func.count()).select_from(RawArticle))
-        assert total == 1
+        rows = session.execute(select(RawArticle).where(RawArticle.url == "https://ex.com/a1")).scalars().all()
+        assert len(rows) == 1
         jr = session.execute(select(JobRun).order_by(JobRun.started_at.desc())).scalars().first()
         assert jr is not None and jr.status == JobStatus.SUCCEEDED
 

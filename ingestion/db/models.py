@@ -11,6 +11,8 @@ from sqlalchemy import (
     Enum as SAEnum,
     Index,
     Integer,
+    Float,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -121,3 +123,35 @@ class JobRun(TimestampMixin, Base):
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_message: Mapped[str | None] = mapped_column(String(512))
     trace_id: Mapped[str | None] = mapped_column(String(64))
+
+
+class ProcessedInsight(TimestampMixin, Base):
+    """LLM로 생성된 분석 결과를 저장."""
+
+    __tablename__ = "processed_insights"
+    __table_args__ = (
+        Index("ix_processed_insights_ticker_generated", "ticker", "generated_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    ticker: Mapped[str] = mapped_column(String(16), nullable=False)
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    keywords: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    sentiment_score: Mapped[float] = mapped_column(Float, nullable=False)
+    anomalies: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    source_refs: Mapped[list[dict] | None] = mapped_column(JSON)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    # LLM meta
+    llm_model: Mapped[str] = mapped_column(String(64), nullable=False)
+    llm_tokens_prompt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    llm_tokens_completion: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    llm_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

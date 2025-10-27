@@ -17,6 +17,18 @@
 - JSON 로그: `LOG_JSON=1` → trace_id, ticker, source, saved 등 필드 확인
 - 실패 태스크 확인: 워커 로그에서 예외 스택과 trace_id로 검색
 
+분석(LLM) 운영
+- 사전 준비: `.env`에 `OPENAI_API_KEY`, `ANALYSIS_MODEL`(gpt-4o-mini 추천), `ANALYSIS_MAX_TOKENS`, `ANALYSIS_TEMPERATURE`,
+  `ANALYSIS_COST_LIMIT_USD`, `ANALYSIS_REQUEST_TIMEOUT_SECONDS`, `ANALYSIS_RETRY_MAX_ATTEMPTS` 설정
+- 수동 실행: `uv run -- python -c "from analysis.tasks.analyze import analyze_core; print(analyze_core('AAPL'))"`
+- 레이트 제한: 워커 동시성 낮추기, Beat 간격 확장, 토큰 상한 조정
+- 관찰 포인트: 로그 `analyze.saved`의 model/tokens/cost, 실패 이벤트(파싱 실패, 타임아웃, 비용 상한 초과)
+- 플레이북
+  - 기사 없음: `analyze.no_articles` → 수집 상태/스케줄 점검
+  - JSON 파싱 실패: 프롬프트 템플릿/로케일 확인, 재시도 횟수 조정
+  - 비용 상한 초과: 모델/토큰 상한 하향, Beat 간격 조정, 대안 모델 고려
+  - 타임아웃: 요청 타임아웃 상향 또는 입력 청크 축소, 동시성 하향
+
 장애 대응 체크리스트
 - [ ] Redis 연결 확인(`INGESTION_REDIS_URL`, docker-compose 상태)
 - [ ] DB 연결 확인(POSTGRES_DSN 접속, 마이그레이션 적용 여부)
@@ -27,4 +39,3 @@
 운영 팁
 - 개발 환경에서는 SQLite(파일)로 빠르게 확인하고, 배포 환경은 관리형 DB를 사용하세요.
 - 민감 정보는 로그에 포함하지 않고, trace_id를 통해 사건을 상관 분석합니다.
-

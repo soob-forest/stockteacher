@@ -1,0 +1,2 @@
+"""Analysis Celery tasks package."""
+

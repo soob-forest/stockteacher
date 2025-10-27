@@ -57,6 +57,21 @@ StockTeacher — Slack 주식 리포트 봇 (MVP)
   - `uv run -- python -c "from ingestion.tasks.collect import collect_core; print(collect_core('AAPL','news_api'))"`
 - 로그 필드: trace_id, ticker, source, fetched, unique, saved 등
 
+분석(LLM) 운영 가이드
+- 환경 변수(필수/권장)
+  - `OPENAI_API_KEY`(필수), `ANALYSIS_MODEL`(기본 gpt-4o-mini), `ANALYSIS_MAX_TOKENS`(기본 512)
+  - `ANALYSIS_TEMPERATURE`(기본 0.2), `DEFAULT_LOCALE`(기본 ko_KR)
+  - 비용/안전: `ANALYSIS_COST_LIMIT_USD`(요청당 상한, 기본 0.02), `ANALYSIS_REQUEST_TIMEOUT_SECONDS`(기본 15), `ANALYSIS_RETRY_MAX_ATTEMPTS`(기본 2)
+- 실행 예시(개발용)
+  - `uv run -- python -c "from analysis.tasks.analyze import analyze_core; print(analyze_core('AAPL'))"`
+- 레이트 제한/동시성
+  - Celery 워커 동시성(`CELERY_WORKER_CONCURRENCY`)을 보수적으로 설정하고, Beat 스케줄 간격을 충분히 둡니다.
+  - 모델/요청당 토큰 상한을 낮춰 비용/지연을 제어합니다.
+- 관찰성
+  - 로그 이벤트: `analyze.saved`에 `model`, `tokens_prompt`, `tokens_completion`, `cost` 포함
+  - 비용 상한 초과 시 Permanent 에러 처리, JobRun FAILED 기록
+  - JSON 파싱 실패/타임아웃은 재시도 후 실패 처리, 원인 이벤트로 구분
+
 Redis 사용 가이드(중복 제거 저장소)
 - 목적: 수집 단계에서 기사 fingerprint 기반의 중복 저장을 방지합니다.
 - 활성화 조건: `redis` 파이썬 패키지가 설치되어 있고 `INGESTION_REDIS_URL`이 설정되어 있으면 RedisKeyStore를 자동 사용합니다. 그렇지 않으면 인메모리로 폴백합니다.
