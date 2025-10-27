@@ -22,7 +22,7 @@
 - [x] Step 2 — 설정 모듈(pydantic 기반)과 Celery Beat/Worker 초기화 코드 작성, 설정 단위 테스트.
 - [x] Step 3 — SQLAlchemy 모델(RawArticle, JobRun)과 Alembic 베이스라인 마이그레이션 작성, 마이그레이션 검증 테스트.
 - [x] Step 4 — 커넥터 추상화 및 News API + RSS 커넥터 구현, 응답 정규화·재시도/중복 방지 유닛 테스트.
-- [ ] Step 5 — 수집 태스크(Celery) 및 JobRun 기록 로직 구현, Redis/DB 기반 중복 제거 로직 테스트.
+- [x] Step 5 — 수집 태스크(Celery) 및 JobRun 기록 로직 구현, Redis/DB 기반 중복 제거 로직 테스트.
 - [ ] Step 6 — 구조화 로깅/메트릭 훅 추가, docker-compose/README/Runbook 갱신과 운영 체크리스트 작성.
 
 ## 리스크 & 대응
