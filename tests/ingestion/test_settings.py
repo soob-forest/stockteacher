@@ -16,7 +16,6 @@ def _set_required_env(monkeypatch, **overrides):
     defaults = {
         "INGESTION_REDIS_URL": "redis://localhost:6379/0",
         "NEWS_API_KEY": "secret-key",
-        "SNS_FEED_URLS": json.dumps(["https://example.com/rss"]),
         "POSTGRES_DSN": "postgresql://user:pass@localhost:5432/app",
         "LOCAL_STORAGE_ROOT": "./var/storage",
         "COLLECTION_SCHEDULES": json.dumps(
@@ -42,7 +41,6 @@ def test_get_settings_reads_environment(monkeypatch):
 
     assert settings.redis_url == "redis://localhost:6379/0"
     assert settings.news_api_key and settings.news_api_key.get_secret_value() == "secret-key"
-    assert settings.sns_feed_urls == ["https://example.com/rss"]
     assert settings.collection_schedules[0].ticker == "AAPL"
     assert settings.collection_schedules[0].interval_minutes == 5
     assert settings.local_storage_root.endswith("var/storage")

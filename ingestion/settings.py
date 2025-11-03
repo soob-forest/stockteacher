@@ -21,7 +21,7 @@ class CollectionSchedule(BaseModel):
     """Represents a periodic collection job configuration."""
 
     ticker: str = Field(..., description="대상 종목 티커 (대문자).")
-    source: str = Field(..., description="데이터 소스 식별자 (예: news_api, rss).")
+    source: str = Field(..., description="데이터 소스 식별자 (예: news_api).")
     interval_minutes: PositiveInt = Field(..., description="수집 주기 (분 단위).")
     enabled: bool = Field(True, description="스케줄 사용 여부.")
 
@@ -66,7 +66,6 @@ class Settings(BaseSettings):
     news_api_page_size: PositiveInt = Field(20, alias="NEWS_API_PAGE_SIZE", description="News API 페이지 크기(≤100)")
     news_api_lang: str = Field("ko", alias="NEWS_API_LANG", description="News API 언어 필터")
     news_api_sort_by: str = Field("publishedAt", alias="NEWS_API_SORT_BY", description="정렬 기준")
-    sns_feed_urls: List[str] = Field(default_factory=list, alias="SNS_FEED_URLS", description="SNS RSS/피드 URL 목록.")
     postgres_dsn: str = Field(..., alias="POSTGRES_DSN", description="PostgreSQL 연결 문자열.")
     local_storage_root: str = Field(
         "./var/storage",
@@ -92,24 +91,6 @@ class Settings(BaseSettings):
         alias="CELERY_TASK_SOFT_TIME_LIMIT",
         description="Celery 태스크 소프트 타임아웃 (초).",
     )
-
-    @field_validator("sns_feed_urls", mode="before")
-    @classmethod
-    def _parse_feed_urls(cls, value: Any) -> List[str]:
-        if value in (None, "", []):
-            return []
-        if isinstance(value, str):
-            try:
-                parsed = json.loads(value)
-            except json.JSONDecodeError:
-                parsed = [part.strip() for part in value.split(",") if part.strip()]
-            else:
-                if not isinstance(parsed, list):
-                    raise ValueError("SNS_FEED_URLS는 리스트 형태여야 합니다.")
-            return parsed
-        if isinstance(value, list):
-            return value
-        raise ValueError("SNS_FEED_URLS는 문자열 또는 리스트여야 합니다.")
 
     @field_validator("collection_schedules", mode="before")
     @classmethod

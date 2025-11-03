@@ -10,9 +10,9 @@ StockTeacher — Slack 주식 리포트 봇 (MVP)
 - 프로젝트 루트에 `.env` 파일을 생성하거나 환경 변수를 내보냅니다. 최소 예시는 다음과 같습니다.
   - `INGESTION_REDIS_URL=redis://localhost:6379/0`
   - `NEWS_API_KEY=dev-placeholder`
-  - `SNS_FEED_URLS=["https://example.com/rss"]`
   - `POSTGRES_DSN=sqlite:///./var/dev.db`  # 로컬 개발은 SQLite 파일 사용
   - `COLLECTION_SCHEDULES=[{"ticker":"AAPL","source":"news_api","interval_minutes":5,"enabled":true}]`
+  - 참고: RSS 기반 수집은 MVP 범위에서 제외되어 현재는 NewsAPI만 지원합니다.
   - 선택: `STRUCTLOG_LEVEL=INFO`
 - 로컬 저장 디렉토리 준비: `mkdir -p var/storage`
   - 문서 상 요구사항은 S3 대신 로컬 디렉토리(기본 `./var/storage`, 환경변수 `LOCAL_STORAGE_ROOT` 고려) 사용으로 변경되었습니다.

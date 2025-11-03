@@ -21,13 +21,13 @@
 - 구성 로드 실패, 브로커 연결 실패 시 구체적인 예외 메시지와 종료 코드를 남긴다.
 
 ## 모듈 구성 요약
-- ingestion/settings.py: Pydantic BaseSettings 기반 구성. 필수 키: NEWS_API_KEY, SNS_FEED_URLS, POSTGRES_DSN, LOCAL_STORAGE_ROOT, DEFAULT_LOCALE 등.
+- ingestion/settings.py: Pydantic BaseSettings 기반 구성. 필수 키: NEWS_API_KEY, POSTGRES_DSN, LOCAL_STORAGE_ROOT, DEFAULT_LOCALE 등.
 - ingestion/celery_app.py: Celery 인스턴스 팩토리 + Beat 스케줄 로더.
   - 로깅: `utils/logging.configure_logging(level, json_enabled)` 사용
 - ingestion/tasks/collect.py: 주요 Celery 태스크(collect_articles_for_ticker, fanout_collection_jobs).
   - trace_id 생성/전파, 수집/저장 이벤트 구조화 로깅
 - ingestion/connectors/base.py: 커넥터 인터페이스(fetch(params) -> list[RawArticleDTO]) 및 오류 계층.
-- ingestion/connectors/news_api.py, ingestion/connectors/rss.py: 옵션 A 기반 구현.
+- ingestion/connectors/news_api.py: 옵션 A 기반 구현 (RSS 커넥터는 MVP 범위에서 제외).
 - ingestion/services/normalizer.py: 텍스트 정규화, 언어 감지, hash 생성.
 - ingestion/services/deduplicator.py: Redis + DB를 사용한 중복 검사.
   - KeyStore 구현: InMemory(기본), RedisKeyStore(redis-py 사용 가능 시 자동 사용)
@@ -54,7 +54,6 @@ ingestion/
     __init__.py
     base.py
     news_api.py
-    rss.py
   services/
     __init__.py
     normalizer.py

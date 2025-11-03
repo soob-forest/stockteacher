@@ -10,12 +10,11 @@ def _make_settings() -> Settings:
     return Settings(
         redis_url="redis://localhost:6379/0",
         news_api_key="secret",
-        sns_feed_urls=["https://example.com/rss"],
         postgres_dsn="postgresql://user:pass@localhost:5432/app",
         local_storage_root="./var/storage",
         collection_schedules=[
             CollectionSchedule(ticker="AAPL", source="news_api", interval_minutes=5, enabled=True),
-            CollectionSchedule(ticker="TSLA", source="rss", interval_minutes=10, enabled=False),
+            CollectionSchedule(ticker="TSLA", source="news_api", interval_minutes=10, enabled=False),
         ],
         structlog_level="DEBUG",
         celery_worker_concurrency=2,

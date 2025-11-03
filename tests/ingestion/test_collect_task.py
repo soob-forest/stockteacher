@@ -21,7 +21,6 @@ def _set_env(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("INGESTION_REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("POSTGRES_DSN", f"sqlite:///{tmp_path / 'collect.db'}")
     monkeypatch.setenv("NEWS_API_KEY", "dummy")
-    monkeypatch.setenv("SNS_FEED_URLS", json.dumps([]))
     monkeypatch.setenv("LOCAL_STORAGE_ROOT", str(tmp_path / "storage"))
     monkeypatch.setenv(
         "COLLECTION_SCHEDULES",

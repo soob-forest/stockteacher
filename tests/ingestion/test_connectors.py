@@ -7,7 +7,6 @@ import pytest
 
 from ingestion.connectors.base import TransientError
 from ingestion.connectors.news_api import NewsAPIConnector
-from ingestion.connectors.rss import RSSConnector
 
 
 def _news_provider_success(_ticker: str, _since: Optional[datetime]):
@@ -41,26 +40,6 @@ def test_newsapi_connector_normalizes_and_dedupes():
     assert item.url.host == "example.com"
     assert item.published_at.year == 2025
     assert len(item.fingerprint) == 64
-
-
-def test_rss_connector_normalizes():
-    def _rss_fetcher(_ticker: str, _since: Optional[datetime]):
-        return [
-            {
-                "title": "TSLA delivery update",
-                "summary": "Q4 deliveries beat",
-                "link": "https://example.com/tsla1",
-                "published": datetime(2025, 2, 1, tzinfo=timezone.utc),
-                "language": "en",
-            }
-        ]
-
-    connector = RSSConnector(fetcher=_rss_fetcher)
-    items = connector.fetch("TSLA")
-
-    assert len(items) == 1
-    assert items[0].source == "rss"
-    assert items[0].url.scheme == "https"
 
 
 def test_connector_retries_on_transient_error():

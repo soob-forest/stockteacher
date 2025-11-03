@@ -12,7 +12,7 @@ class RawArticleDTO(BaseModel):
     """Normalized representation of a raw article item."""
 
     ticker: str = Field(..., description="대상 종목 티커(대문자)")
-    source: str = Field(..., description="커넥터 소스 식별자(e.g., news_api, rss)")
+    source: str = Field(..., description="커넥터 소스 식별자(e.g., news_api)")
     source_type: str = Field(..., description="소스 유형(e.g., news, sns, press)")
     title: str
     body: str
