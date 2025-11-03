@@ -25,8 +25,8 @@
 - [x] Step C — 프롬프트 템플릿과 프롬프트 빌더(입력 정규화/언어/톤/길이 제한). 결정적 테스트.
 - [x] Step D — OpenAI 클라이언트 래퍼(재시도/타임아웃/관찰성/비용 추적/구조화 출력 파서). Fake Provider 기반 테스트.
 - [x] Step E — 리포지토리/마이그레이션(ProcessedInsight 저장, llm_* 메타 저장). 스모크 테스트.
-- [ ] Step F — Celery 태스크(analyze_articles_for_ticker): 배치/청크/레이트 제한, JobRun 기록, 에러/재시도. 성공/실패 경로 테스트.
-- [ ] Step G — README/Runbook 업데이트(OPENAI 설정, 비용 상한, 운영 체크리스트) 및 SPEC 반영 검토.
+- [x] Step F — Celery 태스크(analyze_articles_for_ticker): 배치/청크/레이트 제한, JobRun 기록, 에러/재시도. 성공/실패 경로 테스트.
+- [x] Step G — README/Runbook 업데이트(OPENAI 설정, 비용 상한, 운영 체크리스트) 및 SPEC 반영 검토.
 
 ## 설계 개요
 - 모듈 구성(초안)

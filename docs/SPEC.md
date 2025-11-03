@@ -76,12 +76,14 @@
   - 결론: 핵심 언론/공시는 API 사용, SNS는 공식 API 또는 RSS, 스크래핑은 보조 채널로 제한
 - 분석 단계:
   - OpenAI 라이브러리를 활용한 LLM 호출 기반 파이프라인: 텍스트 정제 → 프롬프트 구성 → OpenAI Chat Completions 호출 → 요약/키워드/감성/이상 이벤트 추출 → 결과 정규화/저장
+
+  - 쿠/재시도: Celery 공유 태스크를 `analysis.analyze` 큐에 배치하고 `TransientLLMError`는 backoff+jitter 기반으로 최대 3회 자동 재시도, 비용 한도 초과 등 영구 오류는 즉시 실패 처리.
   - 모델 전략 대안
     1. GPT-4o-mini(또는 동급): 비용 효율적, 속도 우수, 복잡 과제 한계 가능
     2. GPT-4.1 계열: 품질 우수, 비용↑, 지연시간↑
   - 결론: 초기엔 비용 대비 품질이 우수한 소형 모델(예: gpt-4o-mini) 우선 적용, 품질 요구가 높은 섹션에 한해 상위 모델을 선택적으로 사용(스위치/플래그)하고 토큰/비용 상한선을 강제한다.
   - 프롬프트 설계: 종목·기간·언어·톤을 매개변수화하고, 안전 가이드라인 및 금칙어(PII/과도한 확신 등) 포함. 시스템/유저 메시지 분리, 함수호출/구조화 출력(JSON) 우선.
-  - 관찰성: trace_id 전파, 모델/토큰/비용 지표 기록, 프롬프트/응답 샘플은 PII 제거 후 제한적 보관(옵션).
+  - 관찰성: trace_id 전파, 모델/토큰/비용 지표 기록, 로그 이벤트(`analyze.start`, `analyze.saved`, `analyze.transient_error`, `analyze.permanent_error`, `analyze.unexpected_error`) 및 JobRun(stage=analyze, source=openai) 상태로 흐름을 추적하고 프롬프트/응답 샘플은 PII 제거 후 제한적으로 보관(옵션).
 - 봇 시스템 단계:
   - Python Slack Bolt 앱으로 MVP 구성, Celery 결과를 Slack 메시지로 변환
   - 확장 대안

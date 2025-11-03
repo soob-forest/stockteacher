@@ -8,7 +8,12 @@ from typing import Callable, List, Optional
 from celery import shared_task
 from sqlalchemy import select
 
-from analysis.client.openai_client import OpenAIClient
+from analysis.client.openai_client import (
+    OpenAIClient,
+    PermanentLLMError,
+    ProviderFn,
+    TransientLLMError,
+)
 from analysis.models.domain import AnalysisInput, InputArticle
 from analysis.repositories.insights import save_insight
 from analysis.settings import get_analysis_settings
@@ -19,7 +24,7 @@ from ingestion.utils.logging import get_logger
 
 
 # Provider factory injection point for tests (returns provider fn or None for real OpenAI)
-PROVIDER_FACTORY: Callable[[], Optional[Callable]] | None = None
+PROVIDER_FACTORY: Callable[[], Optional[ProviderFn]] | None = None
 
 
 def _ensure_schema() -> None:
@@ -50,7 +55,7 @@ def analyze_core(ticker: str, *, max_chars: int | None = None) -> int:
         session,
         stage=JobStage.ANALYZE,
         ticker=ticker,
-        source=None,
+        source="openai",
         task_name="analyze_articles_for_ticker",
         trace_id=trace_id,
     ):
@@ -58,6 +63,10 @@ def analyze_core(ticker: str, *, max_chars: int | None = None) -> int:
         if not rows:
             logger.info("analyze.no_articles", extra={"trace_id": trace_id, "ticker": ticker})
             return 0
+        logger.info(
+            "analyze.start",
+            extra={"trace_id": trace_id, "ticker": ticker, "articles": len(rows)},
+        )
         items = [
             InputArticle(title=r.title, body=r.body, url=r.url, language=r.language, published_at=r.published_at)
             for r in rows
@@ -68,9 +77,20 @@ def analyze_core(ticker: str, *, max_chars: int | None = None) -> int:
             items=items,
             max_chars=max_chars or 5000,
         )
+        extra = {"trace_id": trace_id, "ticker": ticker}
         provider = PROVIDER_FACTORY() if PROVIDER_FACTORY else None
         client = OpenAIClient.from_env(provider=provider)
-        result = client.analyze(inp)
+        try:
+            result = client.analyze(inp)
+        except PermanentLLMError as exc:
+            logger.warning("analyze.permanent_error", extra={**extra, "error": str(exc)})
+            raise
+        except TransientLLMError as exc:
+            logger.warning("analyze.transient_error", extra={**extra, "error": str(exc)})
+            raise
+        except Exception:
+            logger.exception("analyze.unexpected_error", extra=extra)
+            raise
         source_refs = [{"url": r.url, "collected_at": r.collected_at.isoformat()} for r in rows]
         save_insight(session, result, source_refs=source_refs)
         logger.info(
@@ -82,12 +102,20 @@ def analyze_core(ticker: str, *, max_chars: int | None = None) -> int:
                 "tokens_prompt": result.llm_tokens_prompt,
                 "tokens_completion": result.llm_tokens_completion,
                 "cost": result.llm_cost,
+                "articles": len(rows),
             },
         )
         return 1
 
 
-@shared_task(name="analysis.tasks.analyze.analyze_articles_for_ticker")
+@shared_task(
+    name="analysis.tasks.analyze.analyze_articles_for_ticker",
+    queue="analysis.analyze",
+    autoretry_for=(TransientLLMError,),
+    retry_backoff=True,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 3},
+)
 def analyze_articles_for_ticker(ticker: str) -> int:  # pragma: no cover - thin wrapper
     return analyze_core(ticker)
 

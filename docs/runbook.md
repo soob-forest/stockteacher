@@ -22,11 +22,12 @@
   `ANALYSIS_COST_LIMIT_USD`, `ANALYSIS_REQUEST_TIMEOUT_SECONDS`, `ANALYSIS_RETRY_MAX_ATTEMPTS` 설정
 - 수동 실행: `uv run -- python -c "from analysis.tasks.analyze import analyze_core; print(analyze_core('AAPL'))"`
 - 레이트 제한: 워커 동시성 낮추기, Beat 간격 확장, 토큰 상한 조정
-- 관찰 포인트: 로그 `analyze.saved`의 model/tokens/cost, 실패 이벤트(파싱 실패, 타임아웃, 비용 상한 초과)
+- 워커/큐 운영: 분석 태스크는 ingestion Celery 워커에서 처리되며 필요 시 `uv run -- celery -A ingestion.celery_app:get_celery_app worker -Q analysis.analyze -l info` 전용 워커를 추가합니다.
+- 관찰 포인트: `analyze.start`(기사 수), `analyze.saved`(model/tokens/cost), `analyze.transient_error`/`analyze.permanent_error`/`analyze.unexpected_error` 로그로 성공·실패를 구분하고 JobRun(stage=analyze, source=openai) 상태를 함께 확인
 - 플레이북
   - 기사 없음: `analyze.no_articles` → 수집 상태/스케줄 점검
-  - JSON 파싱 실패: 프롬프트 템플릿/로케일 확인, 재시도 횟수 조정
-  - 비용 상한 초과: 모델/토큰 상한 하향, Beat 간격 조정, 대안 모델 고려
+  - JSON 파싱 실패: 프롬프트 템플릿/로케일 확인, 재시도 횟수 조정(`TransientLLMError`는 최대 3회 자동 재시도)
+  - 비용 상한 초과: 모델/토큰 상한 하향, Beat 간격 조정, 대안 모델 고려(PermanentLLMError → 재시도 없음)
   - 타임아웃: 요청 타임아웃 상향 또는 입력 청크 축소, 동시성 하향
 
 장애 대응 체크리스트

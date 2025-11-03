@@ -64,13 +64,16 @@ StockTeacher — Slack 주식 리포트 봇 (MVP)
   - 비용/안전: `ANALYSIS_COST_LIMIT_USD`(요청당 상한, 기본 0.02), `ANALYSIS_REQUEST_TIMEOUT_SECONDS`(기본 15), `ANALYSIS_RETRY_MAX_ATTEMPTS`(기본 2)
 - 실행 예시(개발용)
   - `uv run -- python -c "from analysis.tasks.analyze import analyze_core; print(analyze_core('AAPL'))"`
+- 워커 운영
+  - 분석 Celery 태스크는 ingestion Celery 앱과 동일 워커에서 소비된다. 대규모 트래픽 시 `uv run -- celery -A ingestion.celery_app:get_celery_app worker -Q analysis.analyze -l info` 형태의 전용 워커를 추가하는 것을 권장한다.
 - 레이트 제한/동시성
   - Celery 워커 동시성(`CELERY_WORKER_CONCURRENCY`)을 보수적으로 설정하고, Beat 스케줄 간격을 충분히 둡니다.
   - 모델/요청당 토큰 상한을 낮춰 비용/지연을 제어합니다.
 - 관찰성
-  - 로그 이벤트: `analyze.saved`에 `model`, `tokens_prompt`, `tokens_completion`, `cost` 포함
-  - 비용 상한 초과 시 Permanent 에러 처리, JobRun FAILED 기록
-  - JSON 파싱 실패/타임아웃은 재시도 후 실패 처리, 원인 이벤트로 구분
+  - 로그 이벤트: `analyze.start`(기사 건수), `analyze.saved`(model/tokens/cost), `analyze.transient_error`/`analyze.permanent_error`/`analyze.unexpected_error`로 유형별 실패를 추적합니다.
+  - 비용 상한 초과 시 `PermanentLLMError`로 처리되어 재시도하지 않으며, JobRun(stage=analyze, source=openai)이 FAILED로 기록됩니다.
+  - 자동 재시도: `TransientLLMError`는 Celery의 backoff+jitter로 최대 3회 재시도합니다.
+  - JSON 파싱 실패/타임아웃은 재시도 후 실패 처리하며, 원인 이벤트로 구분됩니다.
 
 실데이터 수집 스모크 테스트(NewsAPI)
 - 사전 준비: `.env`에 `NEWS_API_KEY` 설정(그 외 기본값 사용 가능).

@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
+from analysis.client.openai_client import PermanentLLMError
 from analysis.tasks import analyze as analyze_mod
 from ingestion.db.models import Base, RawArticle, ProcessedInsight, JobRun, JobStatus
 from ingestion.db.session import get_engine
@@ -75,6 +76,20 @@ def _provider_ok(_: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _provider_costly(_: Dict[str, Any]) -> Dict[str, Any]:
+    resp = {
+        "summary_text": "Token usage too high.",
+        "keywords": ["apple", "earnings", "guidance"],
+        "sentiment_score": 0.1,
+        "anomalies": [],
+    }
+    return {
+        "choices": [{"message": {"content": json.dumps(resp)}}],
+        "usage": {"prompt_tokens": 1000, "completion_tokens": 50000},
+        "model": "gpt-4o-mini",
+    }
+
+
 def test_analyze_core_saves_insight(tmp_path: Path, monkeypatch):
     _setup_articles(tmp_path)
 
@@ -90,6 +105,7 @@ def test_analyze_core_saves_insight(tmp_path: Path, monkeypatch):
         assert pi.llm_model == "gpt-4o-mini"
         jr = session.execute(select(JobRun).order_by(JobRun.started_at.desc())).scalars().first()
         assert jr is not None and jr.status == JobStatus.SUCCEEDED
+        assert jr.source == "openai"
 
 
 def test_analyze_core_failure_marks_jobrun(tmp_path: Path):
@@ -108,3 +124,21 @@ def test_analyze_core_failure_marks_jobrun(tmp_path: Path):
     with SessionLocal() as session:
         jr = session.execute(select(JobRun).order_by(JobRun.started_at.desc())).scalars().first()
         assert jr is not None and jr.status == JobStatus.FAILED
+
+
+def test_analyze_core_cost_limit_marks_jobrun(tmp_path: Path, monkeypatch):
+    _setup_articles(tmp_path)
+    monkeypatch.setenv("ANALYSIS_COST_LIMIT_USD", "0.001")
+
+    analyze_mod.PROVIDER_FACTORY = lambda: _provider_costly
+
+    with pytest.raises(PermanentLLMError):
+        analyze_mod.analyze_core("AAPL")
+
+    engine = get_engine()
+    SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    with SessionLocal() as session:
+        jr = session.execute(select(JobRun).order_by(JobRun.started_at.desc())).scalars().first()
+        assert jr is not None
+        assert jr.status == JobStatus.FAILED
+        assert jr.error_message == "LLM 비용 제한 초과"
