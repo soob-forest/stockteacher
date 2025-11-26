@@ -44,6 +44,23 @@ StockTeacher — Slack 주식 리포트 봇 (MVP)
   - 예시: `POSTGRES_DSN=postgresql+psycopg://postgres:postgres@localhost:5432/stockteacher uv run -- alembic upgrade head`
   - 위 명령을 한 번 실행하면 `raw_articles`, `job_runs`, `processed_insights` 스키마와 AAPL 더미 데이터가 생성됩니다.
 
+## 문서
+
+자세한 문서는 [docs/](./docs/README.md)를 참조하세요.
+
+**주요 문서**:
+- [아키텍처 개요](./docs/ARCHITECTURE.md) - 시스템 전체 구조
+- [운영 가이드](./docs/OPERATIONS.md) - 배포 및 운영 절차
+- [테스트 전략](./docs/TESTING.md) - 테스트 방법 및 가이드
+- [의사결정 로그](./docs/DECISIONS.md) - 주요 기술 결정 기록
+- [로드맵](./docs/ROADMAP.md) - 프로젝트 계획
+
+**모듈별 문서**:
+- [Ingestion](./docs/ingestion/README.md) - 데이터 수집
+- [Analysis](./docs/analysis/README.md) - LLM 분석
+- [Publish](./docs/publish/README.md) - 리포트 게시
+- [API](./docs/api/README.md) - REST API
+- [Web](./docs/web/README.md) - 웹 애플리케이션
 
 프로젝트 구조 참조
 - `ingestion/celery_app.py:17` Celery 팩토리 + Beat 스케줄 구성
