@@ -29,12 +29,21 @@ StockTeacher — Slack 주식 리포트 봇 (MVP)
 - `uv run -- alembic upgrade head`
 - Alembic 설정은 `alembic.ini:1`에 있으며, `script_location = ingestion/db/migrations`, 기본 URL은 `sqlite:///./var/dev.db` 입니다.
 
-5) 앱 실행
+5) 앱 실행 (로컬 개발용 API + Web)
 - 간단 동작 확인: `uv run -- python main.py` (인사 문구 출력)
 - Celery 워커: `uv run -- celery -A ingestion.celery_app:get_celery_app worker -l info`
 - Celery 비트: `uv run -- celery -A ingestion.celery_app:get_celery_app beat -l info`
   - `INGESTION_REDIS_URL`에 Redis가 실행 중이어야 합니다.
  - 비트 스케줄은 `COLLECTION_SCHEDULES`를 기반으로 생성됩니다.
+
+로컬 전체 서버 실행 스크립트
+- docker / docker-compose가 설치되어 있다면, 아래 스크립트로 Redis/Postgres 컨테이너와 API/Web 서버를 한 번에 올릴 수 있습니다.
+  - Redis/Postgres 기동 + API/웹 서버 시작: `./scripts/run_servers.sh`
+  - 실행 중인 API/웹 서버 및 Redis/Postgres 컨테이너 중지: `./scripts/stop_servers.sh`
+- Postgres 컨테이너를 사용할 때 ingestion용 DB 마이그레이션과 더미 데이터는 Alembic으로 적용합니다.
+  - 예시: `POSTGRES_DSN=postgresql+psycopg://postgres:postgres@localhost:5432/stockteacher uv run -- alembic upgrade head`
+  - 위 명령을 한 번 실행하면 `raw_articles`, `job_runs`, `processed_insights` 스키마와 AAPL 더미 데이터가 생성됩니다.
+
 
 프로젝트 구조 참조
 - `ingestion/celery_app.py:17` Celery 팩토리 + Beat 스케줄 구성
