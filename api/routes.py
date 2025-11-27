@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
@@ -195,3 +195,59 @@ def _ensure_subscription_owner(
     subs = list_subscriptions(session, user_id)
     if not any(sub.subscription_id == subscription_id for sub in subs):
         raise HTTPException(status_code=404, detail="Subscription not found.")
+
+
+# ===== WebSocket Chat Endpoint =====
+
+
+@router.websocket("/chat/ws/{session_id}")
+async def chat_websocket(
+    websocket: WebSocket,
+    session_id: str,
+    session: SessionDep,
+):
+    """WebSocket endpoint for real-time chat.
+
+    Protocol:
+        Client -> Server: {"type": "message", "content": "..."}
+        Server -> Client: {"type": "chunk", "content": "..."}
+                         {"type": "done", "message_id": "..."}
+                         {"type": "error", "detail": "..."}
+    """
+    from api.chat_service import get_chat_service
+    from api.websocket_manager import manager
+
+    await manager.connect(session_id, websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+
+            if data.get("type") != "message":
+                await websocket.send_json(
+                    {"type": "error", "detail": "Invalid message type"}
+                )
+                continue
+
+            user_message = data.get("content", "").strip()
+            if not user_message:
+                await websocket.send_json(
+                    {"type": "error", "detail": "Empty message content"}
+                )
+                continue
+
+            try:
+                chat_service = get_chat_service()
+                async for chunk in chat_service.handle_message(
+                    session, session_id, user_message
+                ):
+                    await websocket.send_json({"type": "chunk", "content": chunk})
+
+                await websocket.send_json({"type": "done", "message_id": "latest"})
+
+            except Exception as exc:
+                await websocket.send_json(
+                    {"type": "error", "detail": f"Error processing message: {exc}"}
+                )
+
+    except WebSocketDisconnect:
+        manager.disconnect(session_id)

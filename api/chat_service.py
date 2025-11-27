@@ -47,6 +47,8 @@ class ChatService:
             3. Stream LLM response
             4. Save complete response to DB
         """
+        import asyncio
+
         # 1. Save user message
         add_chat_message(db_session, session_id, "user", user_message)
         db_session.commit()
@@ -54,9 +56,16 @@ class ChatService:
         # 2. Build context
         context = self._build_context(db_session, session_id)
 
-        # 3. Stream LLM response
+        # 3. Stream LLM response (convert sync iterator to async)
         full_response = []
-        for chunk in self.openai_client.stream_chat(messages=context):
+
+        def _stream():
+            """Synchronous streaming wrapper for executor."""
+            return list(self.openai_client.stream_chat(messages=context))
+
+        # Run synchronous streaming in executor
+        chunks = await asyncio.to_thread(_stream)
+        for chunk in chunks:
             full_response.append(chunk)
             yield chunk
 
