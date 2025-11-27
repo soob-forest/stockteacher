@@ -7,10 +7,8 @@ import {
   toggleFavorite,
   startChatSession,
   ChatSession,
-  ChatMessage,
-  sendChatMessage,
-  fetchChatMessages
 } from '../../../lib/api';
+import { useChatWebSocket } from '../../../hooks/useChatWebSocket';
 
 type PageProps = {
   params: { insightId: string };
@@ -30,9 +28,12 @@ export default function ReportDetailPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<ChatSession | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageDraft, setMessageDraft] = useState('');
-  const [sending, setSending] = useState(false);
+
+  // WebSocket hook for real-time chat
+  const { messages, isConnected, error: wsError, isTyping, sendMessage } = useChatWebSocket(
+    session?.session_id || null
+  );
 
   useEffect(() => {
     let canceled = false;
@@ -72,31 +73,12 @@ export default function ReportDetailPage({ params }: PageProps) {
     };
   }, [insightId]);
 
+  // Update error from WebSocket
   useEffect(() => {
-    if (!session) return;
-    let canceled = false;
-    let timer: NodeJS.Timeout;
-
-    const pull = () =>
-      fetchChatMessages(session.session_id)
-        .then((data) => {
-          if (!canceled) {
-            setMessages(data);
-          }
-        })
-        .catch((err) => {
-          if (!canceled) {
-            setError(err.message);
-          }
-        });
-
-    pull();
-    timer = setInterval(pull, 3000);
-    return () => {
-      canceled = true;
-      clearInterval(timer);
-    };
-  }, [session]);
+    if (wsError) {
+      setError(wsError);
+    }
+  }, [wsError]);
 
   const sentimentLabel = useMemo(() => {
     if (!report) return '';
@@ -117,20 +99,10 @@ export default function ReportDetailPage({ params }: PageProps) {
     }
   }
 
-  async function handleSend(): Promise<void> {
-    if (!session || !messageDraft.trim()) return;
-    setSending(true);
-    setError(null);
-    try {
-      await sendChatMessage(session.session_id, messageDraft.trim());
-      setMessageDraft('');
-      const fresh = await fetchChatMessages(session.session_id);
-      setMessages(fresh);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '메시지 전송 실패');
-    } finally {
-      setSending(false);
-    }
+  function handleSend(): void {
+    if (!messageDraft.trim()) return;
+    sendMessage(messageDraft.trim());
+    setMessageDraft('');
   }
 
   if (loading) {
@@ -241,7 +213,12 @@ export default function ReportDetailPage({ params }: PageProps) {
       </section>
 
       <section className="card">
-        <h2>에이전트 대화</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <h2>에이전트 대화</h2>
+          <span style={{ fontSize: '0.9rem' }}>
+            {isConnected ? '🟢 연결됨' : '🔴 연결 끊김'}
+          </span>
+        </div>
         <p className="label">
           리포트 내용을 바탕으로 후속 질문을 입력하면 에이전트가 답변합니다.
         </p>
@@ -262,6 +239,12 @@ export default function ReportDetailPage({ params }: PageProps) {
                 </div>
               ))
             )}
+            {isTyping && (
+              <div className="chat-message" style={{ opacity: 0.7 }}>
+                <span className="sender">AGENT</span>
+                <span>입력 중...</span>
+              </div>
+            )}
           </div>
           <div className="chat-input">
             <textarea
@@ -273,9 +256,9 @@ export default function ReportDetailPage({ params }: PageProps) {
               className="button"
               type="button"
               onClick={handleSend}
-              disabled={sending || messageDraft.trim().length === 0}
+              disabled={!isConnected || isTyping || messageDraft.trim().length === 0}
             >
-              {sending ? '전송 중...' : '전송'}
+              {isTyping ? '응답 대기 중...' : '전송'}
             </button>
           </div>
         </div>
