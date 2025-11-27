@@ -56,18 +56,28 @@ class ChatService:
         # 2. Build context
         context = self._build_context(db_session, session_id)
 
-        # 3. Stream LLM response (convert sync iterator to async)
+        # 3. Stream LLM response chunk by chunk
         full_response = []
 
-        def _stream():
-            """Synchronous streaming wrapper for executor."""
-            return list(self.openai_client.stream_chat(messages=context))
+        # Create iterator in thread-safe way
+        loop = asyncio.get_event_loop()
 
-        # Run synchronous streaming in executor
-        chunks = await asyncio.to_thread(_stream)
-        for chunk in chunks:
-            full_response.append(chunk)
-            yield chunk
+        # Run streaming in executor to not block event loop
+        def _get_next_chunk(iterator):
+            try:
+                return next(iterator), False
+            except StopIteration:
+                return None, True
+
+        stream_iter = self.openai_client.stream_chat(messages=context)
+
+        while True:
+            chunk, done = await loop.run_in_executor(None, _get_next_chunk, stream_iter)
+            if done:
+                break
+            if chunk:
+                full_response.append(chunk)
+                yield chunk
 
         # 4. Save agent response
         complete_response = "".join(full_response)
