@@ -203,8 +203,9 @@ def add_chat_message(
     chat_session.updated_at = datetime.utcnow()
     session.flush()
 
-    if sender == "user":
-        _append_agent_reply(session, chat_session, content)
+    # NOTE: Hardcoded agent reply removed - now handled by WebSocket streaming
+    # if sender == "user":
+    #     _append_agent_reply(session, chat_session, content)
 
     return list_chat_messages(session, session_id)
 
