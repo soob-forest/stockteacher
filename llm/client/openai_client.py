@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, Optional
 
 from analysis.models.domain import AnalysisInput, AnalysisResult
 from analysis.prompts.templates import build_analysis_messages
-from analysis.settings import AnalysisSettings, get_analysis_settings
+from llm.settings import AnalysisSettings, get_analysis_settings
 
 
 class LLMError(Exception):
