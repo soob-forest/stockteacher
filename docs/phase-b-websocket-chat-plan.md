@@ -1,30 +1,48 @@
 # Phase B: 채팅 에이전트 WebSocket 구현
 
+## ✅ 구현 완료 (2025-11-27)
+
+**총 12개 커밋으로 WebSocket 실시간 채팅 완료!**
+
+### 완료된 작업
+- ✅ **Step 1**: LLM 모듈 리팩터링 (llm/ 생성, 스트리밍 지원)
+- ✅ **Step 2**: WebSocket 백엔드 (ConnectionManager, ChatService, Redis 캐시, 엔드포인트)
+- ✅ **Step 3**: WebSocket 프론트엔드 (useChatWebSocket 훅, UI 업데이트)
+- ✅ 하드코딩된 응답 제거 → 실시간 LLM 스트리밍
+- ✅ 폴링 방식 제거 → WebSocket 양방향 통신
+- ✅ 순환 import 및 스트리밍 버그 수정
+
+### 남은 작업 (TODO)
+- [ ] 단위 테스트 작성 (llm, api/chat)
+- [ ] 통합 테스트 및 E2E 테스트
+- [ ] 메시지 자동 스크롤
+- [ ] UI 스타일 개선
+
+---
+
 ## 목표
 
 폴링 방식을 WebSocket으로 전환하고, 하드코딩된 응답을 OpenAI LLM 스트리밍 응답으로 교체
 
-## 현재 상태 (2025-11-27 기준)
+## 최종 상태 (2025-11-27 완료)
 
-### 백엔드
-- ✅ 채팅 세션/메시지 DB 모델 완성 (`api/db_models.py` 81-117줄)
-- ✅ 기본 REST API 완성 (`api/routes.py` 151-189줄)
-  - `POST /api/chat/sessions` - 세션 생성
-  - `GET /api/chat/sessions/{id}/messages` - 메시지 조회
-  - `POST /api/chat/sessions/{id}/messages` - 메시지 전송
-- ✅ 채팅 메시지 관리 로직 (`api/repositories.py` 162-227줄)
-- 🔴 **하드코딩된 응답**: `api/repositories.py:212-227` `_append_agent_reply()` 함수
-- ✅ OpenAI 클라이언트 완성 (`analysis/client/openai_client.py` 176줄)
-- ❌ **스트리밍 미지원**: 현재 동기 호출만 사용
-- ❌ WebSocket 미구현
+### 백엔드 ✅
+- ✅ 채팅 세션/메시지 DB 모델 (`api/db_models.py`)
+- ✅ REST API (`api/routes.py`)
+- ✅ **WebSocket 엔드포인트**: `/api/chat/ws/{session_id}`
+- ✅ **LLM 스트리밍**: `llm/client/openai_client.py` stream_chat()
+- ✅ **ChatService**: 실시간 스트리밍 처리 (`api/chat_service.py`)
+- ✅ **ConnectionManager**: WebSocket 연결 관리 (`api/websocket_manager.py`)
+- ✅ **Redis 캐시**: 세션 컨텍스트 저장 (`api/redis_cache.py`)
+- ✅ 하드코딩 응답 제거
 
-### 프론트엔드
-- ✅ 채팅 UI 완성 (`web/app/reports/[insightId]/page.tsx`)
-- ✅ 폴링 방식 (3초 간격 `setInterval`, 75-99줄)
-- ✅ 메시지 전송/표시 로직 (120-134줄, 248-281줄)
-- ⚠️ **UX 문제**: 사용자 메시지 즉시 반영 안됨 (폴링 대기 필요)
-- ⚠️ **API 중복**: 메시지 전송 후 강제 재조회
-- ❌ WebSocket 미구현
+### 프론트엔드 ✅
+- ✅ 채팅 UI (`web/app/reports/[insightId]/page.tsx`)
+- ✅ **WebSocket 훅**: `web/hooks/useChatWebSocket.ts`
+- ✅ 실시간 메시지 표시
+- ✅ 연결 상태 표시 (🟢/🔴)
+- ✅ 타이핑 표시 ("입력 중...")
+- ✅ 자동 재연결 (지수 백오프)
 
 ## 기술 선택 근거
 
@@ -611,137 +629,137 @@ async def load_test():
 ## 준비 단계 (Pre-flight Checklist)
 
 ### 환경 설정 확인
-- [ ] `OPENAI_API_KEY` 환경 변수 설정 확인
-- [ ] Redis 실행 확인 (`docker-compose up -d redis`)
-- [ ] DB 마이그레이션 완료 확인 (`alembic upgrade head`)
-- [ ] 기존 analysis 파이프라인 동작 확인 (`python -c "from analysis.tasks.analyze import analyze_core; print(analyze_core('AAPL'))"`)
+- [x] `OPENAI_API_KEY` 환경 변수 설정 확인
+- [x] Redis 실행 확인 (`docker-compose up -d redis`)
+- [x] DB 마이그레이션 완료 확인 (`alembic upgrade head`)
+- [x] 기존 analysis 파이프라인 동작 확인 (`python -c "from analysis.tasks.analyze import analyze_core; print(analyze_core('AAPL'))"`)
 
 
-## Step 1: LLM 모듈 리팩터링 (1-2일)
+## Step 1: LLM 모듈 리팩터링 (1-2일) ✅
 
-### 1-1. llm/ 모듈 디렉토리 생성 (30분)
-- [ ] `mkdir -p llm/client llm/prompts`
-- [ ] `touch llm/__init__.py llm/client/__init__.py llm/prompts/__init__.py`
-- [ ] Git add 및 커밋: "chore: llm 모듈 디렉토리 생성"
+### 1-1. llm/ 모듈 디렉토리 생성 (30분) ✅
+- [x] `mkdir -p llm/client llm/prompts`
+- [x] `touch llm/__init__.py llm/client/__init__.py llm/prompts/__init__.py`
+- [x] Git add 및 커밋: "chore: llm 모듈 디렉토리 생성"
 
-### 1-2. OpenAI 클라이언트 이동 (1시간)
-- [ ] `git mv analysis/client/openai_client.py llm/client/openai_client.py`
-- [ ] `git mv analysis/settings.py llm/settings.py` (설정 통합 고려)
-- [ ] Git 커밋: "refactor: OpenAI 클라이언트를 llm/ 모듈로 이동"
+### 1-2. OpenAI 클라이언트 이동 (1시간) ✅
+- [x] `git mv analysis/client/openai_client.py llm/client/openai_client.py`
+- [x] `git mv analysis/settings.py llm/settings.py` (설정 통합 고려)
+- [x] Git 커밋: "refactor: OpenAI 클라이언트를 llm/ 모듈로 이동"
 
-### 1-3. 스트리밍 메서드 추가 (2-3시간)
-- [ ] `llm/client/openai_client.py`에 `stream_chat()` 메서드 추가
-  - [ ] OpenAI API `stream=True` 파라미터 사용
-  - [ ] `yield` 방식으로 청크 반환
-  - [ ] 에러 처리 (TransientLLMError, PermanentLLMError)
-- [ ] 단위 테스트 작성: `tests/llm/test_openai_client.py`
+### 1-3. 스트리밍 메서드 추가 (2-3시간) ✅
+- [x] `llm/client/openai_client.py`에 `stream_chat()` 메서드 추가
+  - [x] OpenAI API `stream=True` 파라미터 사용
+  - [x] `yield` 방식으로 청크 반환
+  - [x] 에러 처리 (TransientLLMError, PermanentLLMError)
+- [ ] 단위 테스트 작성: `tests/llm/test_openai_client.py` (TODO)
   - [ ] `test_stream_chat_yields_chunks()` - 스트리밍 검증
   - [ ] `test_stream_chat_handles_errors()` - 에러 처리 검증
-- [ ] Git 커밋: "feat: OpenAI 클라이언트에 스트리밍 지원 추가"
+- [x] Git 커밋: "feat: OpenAI 클라이언트에 스트리밍 지원 추가"
 
-### 1-4. analysis 모듈 업데이트 (1-2시간)
-- [ ] `analysis/tasks/analyze.py` import 경로 변경
-  - [ ] `from analysis.client.openai_client import` → `from llm.client.openai_client import`
-- [ ] `analysis/prompts/templates.py` import 경로 확인/변경 (필요시)
-- [ ] **회귀 테스트 실행**:
-  - [ ] `uv run -- python -m pytest tests/analysis/`
-  - [ ] `uv run -- python -c "from analysis.tasks.analyze import analyze_core; print(analyze_core('AAPL'))"`
-- [ ] Git 커밋: "refactor: analysis 모듈에서 llm 클라이언트 import 경로 업데이트"
+### 1-4. analysis 모듈 업데이트 (1-2시간) ✅
+- [x] `analysis/tasks/analyze.py` import 경로 변경
+  - [x] `from analysis.client.openai_client import` → `from llm.client.openai_client import`
+- [x] `analysis/prompts/templates.py` import 경로 확인/변경 (필요시)
+- [x] **회귀 테스트 실행**:
+  - [x] `uv run -- python -m pytest tests/analysis/` (import 테스트 완료)
+  - [x] `uv run -- python -c "from analysis.tasks.analyze import analyze_core; print(analyze_core('AAPL'))"`
+- [x] Git 커밋: "refactor: analysis 모듈에서 llm 클라이언트 import 경로 업데이트"
 
 ---
 
-## Step 2: WebSocket 백엔드 구현 (2-3일)
+## Step 2: WebSocket 백엔드 구현 (2-3일) ✅
 
-### 2-1. ConnectionManager 구현 (1-2시간)
-- [ ] 파일 생성: `api/websocket_manager.py`
-- [ ] `ConnectionManager` 클래스 구현
-  - [ ] `connect()` - WebSocket 연결 수락
-  - [ ] `disconnect()` - 연결 해제
-  - [ ] `send_message()` - 특정 세션에 메시지 전송
-  - [ ] `active_connections: Dict[str, WebSocket]` 관리
-- [ ] 단위 테스트: `tests/api/test_websocket_manager.py`
-- [ ] Git 커밋: "feat: WebSocket ConnectionManager 구현"
+### 2-1. ConnectionManager 구현 (1-2시간) ✅
+- [x] 파일 생성: `api/websocket_manager.py`
+- [x] `ConnectionManager` 클래스 구현
+  - [x] `connect()` - WebSocket 연결 수락
+  - [x] `disconnect()` - 연결 해제
+  - [x] `send_message()` - 특정 세션에 메시지 전송
+  - [x] `active_connections: Dict[str, WebSocket]` 관리
+- [ ] 단위 테스트: `tests/api/test_websocket_manager.py` (TODO)
+- [x] Git 커밋: "feat: WebSocket ConnectionManager 구현"
 
-### 2-2. ChatService 구현 (3-4시간)
-- [ ] 파일 생성: `api/chat_service.py`
-- [ ] `ChatService` 클래스 구현
-  - [ ] `__init__()` - OpenAIClient, RedisSessionCache 주입
-  - [ ] `handle_message()` - 메시지 처리 및 LLM 스트리밍
-    - [ ] 사용자 메시지 DB 저장
-    - [ ] 컨텍스트 구축 (리포트 요약 + 대화 히스토리)
-    - [ ] LLM 스트리밍 호출
-    - [ ] 청크 yield
-    - [ ] 전체 응답 DB 저장
-  - [ ] `_build_context()` - 채팅 컨텍스트 구축
-    - [ ] 시스템 메시지 (리포트 요약)
-    - [ ] 대화 히스토리 (최근 10개)
-- [ ] 단위 테스트: `tests/api/test_chat_service.py`
+### 2-2. ChatService 구현 (3-4시간) ✅
+- [x] 파일 생성: `api/chat_service.py`
+- [x] `ChatService` 클래스 구현
+  - [x] `__init__()` - OpenAIClient, RedisSessionCache 주입
+  - [x] `handle_message()` - 메시지 처리 및 LLM 스트리밍
+    - [x] 사용자 메시지 DB 저장
+    - [x] 컨텍스트 구축 (리포트 요약 + 대화 히스토리)
+    - [x] LLM 스트리밍 호출 (run_in_executor로 실시간 스트리밍)
+    - [x] 청크 yield
+    - [x] 전체 응답 DB 저장
+  - [x] `_build_context()` - 채팅 컨텍스트 구축
+    - [x] 시스템 메시지 (리포트 요약)
+    - [x] 대화 히스토리 (최근 10개)
+- [ ] 단위 테스트: `tests/api/test_chat_service.py` (TODO)
   - [ ] `test_handle_message_saves_user_message()`
   - [ ] `test_handle_message_streams_llm_response()`
   - [ ] `test_build_context_includes_report_summary()`
-- [ ] Git 커밋: "feat: ChatService 비즈니스 로직 구현"
+- [x] Git 커밋: "feat: ChatService 비즈니스 로직 구현"
 
-### 2-3. RedisSessionCache 구현 (1시간)
-- [ ] 파일 생성: `api/redis_cache.py`
-- [ ] `RedisSessionCache` 클래스 구현
-  - [ ] `get_context()` - 세션 컨텍스트 조회
-  - [ ] `set_context()` - 세션 컨텍스트 저장 (TTL 1시간)
-- [ ] 단위 테스트: `tests/api/test_redis_cache.py`
-- [ ] Git 커밋: "feat: Redis 세션 캐시 구현"
+### 2-3. RedisSessionCache 구현 (1시간) ✅
+- [x] 파일 생성: `api/redis_cache.py`
+- [x] `RedisSessionCache` 클래스 구현
+  - [x] `get_context()` - 세션 컨텍스트 조회
+  - [x] `set_context()` - 세션 컨텍스트 저장 (TTL 1시간)
+- [ ] 단위 테스트: `tests/api/test_redis_cache.py` (TODO)
+- [x] Git 커밋: "feat: Redis 세션 캐시 구현"
 
-### 2-4. WebSocket 엔드포인트 추가 (2-3시간)
-- [ ] `api/routes.py`에 WebSocket 라우트 추가
-  - [ ] `@router.websocket("/chat/ws/{session_id}")`
-  - [ ] ConnectionManager 연결 처리
-  - [ ] 메시지 수신 루프
-  - [ ] ChatService 호출 및 스트리밍
-  - [ ] 청크 전송: `{"type": "chunk", "content": "..."}`
-  - [ ] 완료 전송: `{"type": "done", "message_id": "..."}`
-  - [ ] 에러 전송: `{"type": "error", "detail": "..."}`
-  - [ ] WebSocketDisconnect 처리
-- [ ] 통합 테스트: `tests/api/test_websocket.py`
+### 2-4. WebSocket 엔드포인트 추가 (2-3시간) ✅
+- [x] `api/routes.py`에 WebSocket 라우트 추가
+  - [x] `@router.websocket("/chat/ws/{session_id}")`
+  - [x] ConnectionManager 연결 처리
+  - [x] 메시지 수신 루프
+  - [x] ChatService 호출 및 스트리밍
+  - [x] 청크 전송: `{"type": "chunk", "content": "..."}`
+  - [x] 완료 전송: `{"type": "done", "message_id": "..."}`
+  - [x] 에러 전송: `{"type": "error", "detail": "..."}`
+  - [x] WebSocketDisconnect 처리
+- [ ] 통합 테스트: `tests/api/test_websocket.py` (TODO)
   - [ ] `test_websocket_chat_flow()` - 전체 흐름 테스트
   - [ ] `test_websocket_handles_disconnect()` - 연결 끊김 처리
-- [ ] Git 커밋: "feat: WebSocket 채팅 엔드포인트 구현"
+- [x] Git 커밋: "feat: WebSocket 채팅 엔드포인트 구현"
 
-### 2-5. 하드코딩 응답 제거 (30분)
-- [ ] `api/repositories.py`의 `_append_agent_reply()` 함수 제거 또는 비활성화
-- [ ] `add_chat_message()` 함수에서 자동 응답 로직 제거
-- [ ] Git 커밋: "refactor: 하드코딩된 채팅 응답 제거"
+### 2-5. 하드코딩 응답 제거 (30분) ✅
+- [x] `api/repositories.py`의 `_append_agent_reply()` 함수 제거 또는 비활성화
+- [x] `add_chat_message()` 함수에서 자동 응답 로직 제거
+- [x] Git 커밋: "refactor: 하드코딩된 채팅 응답 제거"
 
 ---
 
-## Step 3: WebSocket 프론트엔드 구현 (1-2일)
+## Step 3: WebSocket 프론트엔드 구현 (1-2일) ✅
 
-### 3-1. WebSocket 훅 생성 (2-3시간)
-- [ ] 파일 생성: `web/hooks/useChatWebSocket.ts`
-- [ ] `useChatWebSocket` 훅 구현
-  - [ ] WebSocket 연결 관리 (useRef)
-  - [ ] 상태 관리: `messages`, `isConnected`, `error`, `isTyping`
-  - [ ] `onopen` - 연결 성공 처리
-  - [ ] `onmessage` - 메시지 타입별 처리
-    - [ ] `type: "chunk"` - 스트리밍 청크 추가
-    - [ ] `type: "done"` - 스트리밍 완료
-    - [ ] `type: "error"` - 에러 표시
-  - [ ] `onerror` - 연결 에러 처리
-  - [ ] `onclose` - 재연결 로직 (지수 백오프, 최대 5회)
-  - [ ] `sendMessage()` - 메시지 전송 함수
-  - [ ] Cleanup (useEffect return)
-- [ ] TypeScript 타입 정의 추가
-- [ ] Git 커밋: "feat: WebSocket 채팅 훅 구현"
+### 3-1. WebSocket 훅 생성 (2-3시간) ✅
+- [x] 파일 생성: `web/hooks/useChatWebSocket.ts`
+- [x] `useChatWebSocket` 훅 구현
+  - [x] WebSocket 연결 관리 (useRef)
+  - [x] 상태 관리: `messages`, `isConnected`, `error`, `isTyping`
+  - [x] `onopen` - 연결 성공 처리
+  - [x] `onmessage` - 메시지 타입별 처리
+    - [x] `type: "chunk"` - 스트리밍 청크 추가
+    - [x] `type: "done"` - 스트리밍 완료
+    - [x] `type: "error"` - 에러 표시
+  - [x] `onerror` - 연결 에러 처리
+  - [x] `onclose` - 재연결 로직 (지수 백오프, 최대 5회)
+  - [x] `sendMessage()` - 메시지 전송 함수
+  - [x] Cleanup (useEffect return)
+- [x] TypeScript 타입 정의 추가
+- [x] Git 커밋: "feat: WebSocket 채팅 훅 구현"
 
-### 3-2. 리포트 상세 페이지 업데이트 (1-2시간)
-- [ ] `web/app/reports/[insightId]/page.tsx` 수정
-  - [ ] 폴링 로직 제거 (setInterval 제거, 75-99줄)
-  - [ ] `useChatWebSocket` 훅 사용
-  - [ ] `handleSend()` 단순화 (API 중복 호출 제거)
-  - [ ] 연결 상태 표시 추가: `{isConnected ? '🟢' : '🔴'}`
-  - [ ] 타이핑 표시 추가: `{isTyping && <div>에이전트가 입력 중...</div>}`
-  - [ ] 메시지 자동 스크롤 추가
-- [ ] Git 커밋: "feat: 폴링 방식을 WebSocket으로 전환"
+### 3-2. 리포트 상세 페이지 업데이트 (1-2시간) ✅
+- [x] `web/app/reports/[insightId]/page.tsx` 수정
+  - [x] 폴링 로직 제거 (setInterval 제거, 75-99줄)
+  - [x] `useChatWebSocket` 훅 사용
+  - [x] `handleSend()` 단순화 (API 중복 호출 제거)
+  - [x] 연결 상태 표시 추가: `{isConnected ? '🟢 연결됨' : '🔴 연결 끊김'}`
+  - [x] 타이핑 표시 추가: `{isTyping && <div>에이전트가 입력 중...</div>}`
+  - [ ] 메시지 자동 스크롤 추가 (TODO)
+- [x] Git 커밋: "feat: 폴링 방식을 WebSocket으로 전환"
 
 ### 3-3. 스타일 개선 (30분-1시간)
-- [ ] `web/app/globals.css` 업데이트
+- [ ] `web/app/globals.css` 업데이트 (TODO)
   - [ ] 연결 상태 표시 스타일 추가
   - [ ] 타이핑 표시 애니메이션 추가
   - [ ] 스트리밍 청크 표시 최적화
