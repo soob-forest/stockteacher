@@ -1,4 +1,4 @@
-"""LLM t|t¸¸ ¨È."""
+"""LLM client module."""
 
 from llm.client.openai_client import (
     LLMError,
