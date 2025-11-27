@@ -3,9 +3,9 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import chat_service as chat_service_module
-from api.chat_service import ChatService
-from api.redis_cache import RedisSessionCache
+from . import chat_service as chat_service_module
+from .chat_service import ChatService
+from .redis_cache import RedisSessionCache
 from llm.client.openai_client import OpenAIClient
 
 from .database import init_db
