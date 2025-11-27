@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from analysis.models.domain import AnalysisInput, AnalysisResult
 from analysis.prompts.templates import build_analysis_messages
@@ -149,4 +149,52 @@ class OpenAIClient:
 
         assert last_exc is not None
         raise TransientLLMError(f"LLM 호출 재시도 한도 초과: {last_exc}")
+
+    def stream_chat(
+        self,
+        messages: List[dict],
+        model: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+    ) -> Iterator[str]:
+        """OpenAI Chat Completion API를 스트리밍 모드로 호출.
+
+        Args:
+            messages: 대화 메시지 리스트 (OpenAI format)
+            model: 모델명 (기본값: settings.analysis_model)
+            max_tokens: 최대 토큰 수 (기본값: settings.analysis_max_tokens)
+            temperature: 샘플링 온도 (기본값: settings.analysis_temperature)
+
+        Yields:
+            str: 각 청크의 텍스트 (delta.content)
+        """
+        model = model or self.settings.analysis_model
+        max_tokens = max_tokens or self.settings.analysis_max_tokens
+        temperature = temperature or self.settings.analysis_temperature
+
+        # 지연 import
+        try:
+            from openai import OpenAI  # type: ignore
+        except Exception as exc:
+            raise PermanentLLMError("openai 라이브러리를 찾을 수 없습니다.") from exc
+
+        client = OpenAI(api_key=self.settings.openai_api_key)
+
+        try:
+            stream = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True,
+            )
+
+            for chunk in stream:
+                if chunk.choices and len(chunk.choices) > 0:
+                    delta = chunk.choices[0].delta
+                    if delta.content:
+                        yield delta.content
+
+        except Exception as exc:
+            raise TransientLLMError(f"스트리밍 중 오류 발생: {exc}") from exc
 
