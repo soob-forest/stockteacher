@@ -8,7 +8,7 @@ from typing import Callable, List, Optional
 from celery import shared_task
 from sqlalchemy import select
 
-from analysis.client.openai_client import (
+from llm.client.openai_client import (
     OpenAIClient,
     PermanentLLMError,
     ProviderFn,
@@ -16,7 +16,7 @@ from analysis.client.openai_client import (
 )
 from analysis.models.domain import AnalysisInput, InputArticle
 from analysis.repositories.insights import save_insight
-from analysis.settings import get_analysis_settings
+from llm.settings import get_analysis_settings
 from ingestion.db.models import Base, RawArticle, JobStage
 from ingestion.db.session import get_engine, session_scope
 from ingestion.repositories.articles import JobRunRecorder

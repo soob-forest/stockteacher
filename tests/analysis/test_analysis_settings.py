@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from analysis.settings import (
+from llm.settings import (
     AnalysisSettings,
     get_analysis_settings,
     reset_analysis_settings_cache,

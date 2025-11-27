@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from analysis.client.openai_client import PermanentLLMError
+from llm.client.openai_client import PermanentLLMError
 from analysis.tasks import analyze as analyze_mod
 from ingestion.db.models import Base, RawArticle, ProcessedInsight, JobRun, JobStatus
 from ingestion.db.session import get_engine

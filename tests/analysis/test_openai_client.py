@@ -5,14 +5,14 @@ from typing import Any, Dict
 
 import pytest
 
-from analysis.client.openai_client import (
+from llm.client.openai_client import (
     LLMError,
     OpenAIClient,
     PermanentLLMError,
     TransientLLMError,
 )
 from analysis.models.domain import AnalysisInput, InputArticle
-from analysis.settings import get_analysis_settings, reset_analysis_settings_cache
+from llm.settings import get_analysis_settings, reset_analysis_settings_cache
 
 
 def _ai():
