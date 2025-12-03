@@ -4,6 +4,9 @@ import json
 import sys
 
 import websockets
+import pytest
+
+pytestmark = pytest.mark.skip(reason="WebSocket 수동 테스트 스크립트 - 자동 테스트에서 건너뜀")
 
 
 async def test_websocket():

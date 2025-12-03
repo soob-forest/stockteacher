@@ -106,6 +106,15 @@ DEFAULT_LOCALE=ko_KR
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/stockteacher
 ```
 
+**추천(DS-2)**
+```bash
+RELATED_MAX_RESULTS=3            # 추천 결과 최대 개수
+RELATED_WINDOW_DAYS=7            # 조회 기간(일)
+RELATED_TICKER_WEIGHT=0.2        # 동일 티커 가중치
+RELATED_FRESHNESS_WEIGHT=0.001   # 신선도 가중치(시간당)
+RELATED_CACHE_TTL_SECONDS=60     # 메모리 캐시 TTL
+```
+
 ### 3. 의존성 설치
 
 #### Python 의존성

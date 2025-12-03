@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+import math
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from analysis.models.domain import AnalysisInput, AnalysisResult
@@ -31,6 +32,7 @@ class PermanentLLMError(LLMError):
 
 
 ProviderFn = Callable[[Dict[str, Any]], Dict[str, Any]]
+StreamProviderFn = Callable[[Dict[str, Any]], Iterator[Any]]
 
 
 _PRICE_PER_1K_TOKENS_USD: Dict[str, Dict[str, float]] = {
@@ -48,14 +50,37 @@ def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -
     )
 
 
+def _estimate_tokens_from_messages(messages: List[dict]) -> int:
+    """길이 기반 보수적 토큰 추정."""
+    total_chars = 0
+    for message in messages:
+        content = message.get("content", "") if isinstance(message, dict) else ""
+        total_chars += len(str(content))
+    return max(1, math.ceil(total_chars / 4))
+
+
+def _load_structured_content(content: str, attempts_left: int) -> Dict[str, Any]:
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as exc:
+        if attempts_left > 0:
+            raise TransientLLMError("LLM 응답 JSON 파싱 실패") from exc
+        raise PermanentLLMError("LLM 응답 JSON 파싱 실패") from exc
+
+
 @dataclass(frozen=True)
 class OpenAIClient:
     settings: AnalysisSettings
     provider: Optional[ProviderFn] = None
+    stream_provider: Optional[StreamProviderFn] = None
 
     @classmethod
-    def from_env(cls, provider: Optional[ProviderFn] = None) -> "OpenAIClient":
-        return cls(get_analysis_settings(), provider=provider)
+    def from_env(
+        cls,
+        provider: Optional[ProviderFn] = None,
+        stream_provider: Optional[StreamProviderFn] = None,
+    ) -> "OpenAIClient":
+        return cls(get_analysis_settings(), provider=provider, stream_provider=stream_provider)
 
     def _get_provider(self) -> ProviderFn:
         if self.provider is not None:
@@ -117,16 +142,10 @@ class OpenAIClient:
                     raise PermanentLLMError("LLM 비용 상한 초과")
 
                 content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
-                try:
-                    data = json.loads(content)
-                except json.JSONDecodeError as exc:
-                    # 첫 JSON 파싱 실패는 재시도, 이후는 영구 실패
-                    if attempts <= int(self.settings.analysis_retry_max_attempts):
-                        last_exc = exc
-                        continue
-                    raise PermanentLLMError("LLM 응답 JSON 파싱 실패") from exc
-
-                result = AnalysisResult(
+                data = _load_structured_content(
+                    content, int(self.settings.analysis_retry_max_attempts) - attempts
+                )
+                return AnalysisResult(
                     ticker=inp.ticker,
                     summary_text=data.get("summary_text", "").strip(),
                     keywords=list(data.get("keywords", []) or []),
@@ -137,7 +156,6 @@ class OpenAIClient:
                     llm_tokens_completion=completion_tokens,
                     llm_cost=cost,
                 )
-                return result
             except TransientLLMError as exc:
                 last_exc = exc
                 continue
@@ -156,23 +174,107 @@ class OpenAIClient:
         model: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
+        *,
+        max_cost_usd: Optional[float] = None,
+        request_timeout_seconds: Optional[float] = None,
+        stream_provider: Optional[StreamProviderFn] = None,
+        retry_max_attempts: Optional[int] = None,
     ) -> Iterator[str]:
-        """OpenAI Chat Completion API를 스트리밍 모드로 호출.
+        """OpenAI Chat Completion API를 스트리밍 모드로 호출."""
+        payload, timeout = self._prepare_stream_payload(
+            messages=messages, model=model, max_tokens=max_tokens, temperature=temperature,
+            max_cost_usd=max_cost_usd, request_timeout_seconds=request_timeout_seconds,
+        )
+        provider = stream_provider or self.stream_provider
+        max_attempts = int(retry_max_attempts) if retry_max_attempts is not None else int(
+            self.settings.analysis_retry_max_attempts
+        )
+        attempts = 0
+        last_exc: Optional[Exception] = None
 
-        Args:
-            messages: 대화 메시지 리스트 (OpenAI format)
-            model: 모델명 (기본값: settings.analysis_model)
-            max_tokens: 최대 토큰 수 (기본값: settings.analysis_max_tokens)
-            temperature: 샘플링 온도 (기본값: settings.analysis_temperature)
+        while attempts <= max_attempts:
+            attempts += 1
+            try:
+                yield from self._stream_with_provider(
+                    provider=provider,
+                    payload=payload,
+                    timeout=timeout,
+                    started_at=time.monotonic(),
+                )
+                return
+            except PermanentLLMError:
+                raise
+            except Exception as exc:
+                last_exc = exc
+                if attempts > max_attempts:
+                    break
 
-        Yields:
-            str: 각 청크의 텍스트 (delta.content)
-        """
-        model = model or self.settings.analysis_model
-        max_tokens = max_tokens or self.settings.analysis_max_tokens
-        temperature = temperature or self.settings.analysis_temperature
+        assert last_exc is not None
+        if isinstance(last_exc, TransientLLMError):
+            raise last_exc
+        raise TransientLLMError(f"스트리밍 실패: {last_exc}") from last_exc
 
-        # 지연 import
+    def _prepare_stream_payload(
+        self,
+        *,
+        messages: List[dict],
+        model: Optional[str],
+        max_tokens: Optional[int],
+        temperature: Optional[float],
+        max_cost_usd: Optional[float],
+        request_timeout_seconds: Optional[float],
+    ) -> tuple[Dict[str, Any], float]:
+        model_name = model or self.settings.analysis_model
+        completion_tokens = max_tokens or self.settings.analysis_max_tokens
+        temp = temperature or self.settings.analysis_temperature
+        max_cost = float(max_cost_usd or self.settings.analysis_cost_limit_usd)
+        timeout = float(request_timeout_seconds or self.settings.analysis_request_timeout_seconds)
+
+        prompt_tokens = _estimate_tokens_from_messages(messages)
+        estimated_cost = _estimate_cost_usd(model_name, prompt_tokens, completion_tokens)
+        if estimated_cost > max_cost:
+            raise PermanentLLMError("예상 비용 상한 초과")
+
+        return (
+            {
+                "model": model_name,
+                "messages": messages,
+                "max_tokens": completion_tokens,
+                "temperature": temp,
+                "stream": True,
+            },
+            timeout,
+        )
+
+    def _stream_with_provider(
+        self,
+        *,
+        provider: Optional[StreamProviderFn],
+        payload: Dict[str, Any],
+        timeout: float,
+        started_at: float,
+    ) -> Iterator[str]:
+        stream_provider = provider or self._get_stream_provider()
+        try:
+            stream = stream_provider(payload)
+        except PermanentLLMError:
+            raise
+        except Exception as exc:
+            raise TransientLLMError(f"스트리밍 provider 생성 실패: {exc}") from exc
+
+        for raw_chunk in stream:
+            elapsed = time.monotonic() - started_at
+            if elapsed > timeout:
+                raise TransientLLMError("LLM 요청 타임아웃 초과")
+
+            content = _extract_delta_content(raw_chunk)
+            if content:
+                yield content
+
+    def _get_stream_provider(self) -> StreamProviderFn:
+        if self.stream_provider is not None:
+            return self.stream_provider
+
         try:
             from openai import OpenAI  # type: ignore
         except Exception as exc:
@@ -180,21 +282,29 @@ class OpenAIClient:
 
         client = OpenAI(api_key=self.settings.openai_api_key)
 
-        try:
-            stream = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stream=True,
-            )
+        def _call(payload: Dict[str, Any]) -> Iterator[Any]:  # pragma: no cover - 네트워크 미사용
+            return client.chat.completions.create(**payload)
 
-            for chunk in stream:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta
-                    if delta.content:
-                        yield delta.content
+        return _call
 
-        except Exception as exc:
-            raise TransientLLMError(f"스트리밍 중 오류 발생: {exc}") from exc
 
+def _extract_delta_content(chunk: Any) -> str:
+    """OpenAI/테스트 chunk 객체에서 delta.content를 추출."""
+    if isinstance(chunk, dict):
+        choices = chunk.get("choices") or []
+        if choices:
+            delta = choices[0].get("delta") or choices[0].get("message") or {}
+            content = delta.get("content") if isinstance(delta, dict) else None
+            return content or ""
+
+    choices = getattr(chunk, "choices", None)
+    if choices:
+        choice = choices[0] if len(choices) > 0 else None
+        if choice:
+            delta = getattr(choice, "delta", None)
+            if delta and getattr(delta, "content", None):
+                return delta.content
+            message = getattr(choice, "message", None)
+            if message and getattr(message, "content", None):
+                return message.content
+    return ""

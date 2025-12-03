@@ -15,6 +15,7 @@ StockTeacher는 주식 종목의 뉴스/공시를 수집·분석하여 웹 포�
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - 전체 아키텍처, 데이터 흐름, 계층별 설계
 - [DECISIONS.md](./DECISIONS.md) - 아키텍처 의사결정 로그 (ADR)
 - [ROADMAP.md](./ROADMAP.md) - 프로젝트 로드맵 및 마일스톤
+- [DS-3: Chroma 기반 RAG 통합 TODO](./ds-3-rag-chroma-plan.md) - 벡터 검색/채팅 RAG 통합 계획
 
 ### 개발 가이드
 - [OPERATIONS.md](./OPERATIONS.md) - 서비스 기동, 모니터링, 장애 대응

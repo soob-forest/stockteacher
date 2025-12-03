@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
 from sqlalchemy import (
@@ -48,6 +48,7 @@ class ReportSnapshot(Base):
     headline: Mapped[str] = mapped_column(String(512))
     summary_text: Mapped[str] = mapped_column(String(4000))
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[str] = mapped_column(String(12), default="published", server_default="published", index=True)
     sentiment_score: Mapped[float] = mapped_column(Float)
     anomaly_score: Mapped[float] = mapped_column(Float, default=0.0)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -117,6 +118,28 @@ class ChatMessage(Base):
     session: Mapped[ChatSession] = relationship(back_populates="messages")
 
 
+class NotificationPolicy(Base):
+    __tablename__ = "notification_policy"
+    __table_args__ = (UniqueConstraint("user_id"),)
+
+    policy_id: Mapped[str] = mapped_column(
+        String(40), primary_key=True, default=lambda: _prefixed_id("np")
+    )
+    user_id: Mapped[str] = mapped_column(String(40), index=True)
+    timezone: Mapped[str] = mapped_column(String(64))
+    window: Mapped[str] = mapped_column(String(24))
+    frequency: Mapped[str] = mapped_column(String(12))
+    channels: Mapped[list[str]] = mapped_column(JSON, default=list)
+    quiet_hours_start: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    quiet_hours_end: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now()
+    )
+
+
 def _prefixed_id(prefix: str) -> str:
     from uuid import uuid4
 
@@ -127,7 +150,7 @@ def seed_reports(session: Session) -> None:
     if session.query(ReportSnapshot).count() > 0:
         return
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     seeds: Iterable[ReportSnapshot] = [
         ReportSnapshot(
             insight_id="insight_a",
@@ -135,6 +158,7 @@ def seed_reports(session: Session) -> None:
             headline="Apple unveils new AI chipset and beats expectations",
             summary_text="Apple introduced a next-generation AI chipset alongside expanding services revenue, lifting analyst expectations for upcoming quarters.",
             published_at=now - timedelta(hours=2),
+            status="published",
             sentiment_score=0.42,
             anomaly_score=0.18,
             tags=["ai", "earnings"],
@@ -153,6 +177,7 @@ def seed_reports(session: Session) -> None:
             headline="Tesla slides on renewed battery supply concerns",
             summary_text="Renewed worries about the EV battery supply chain triggered a pullback in Tesla shares as investors reassessed production targets.",
             published_at=now - timedelta(hours=5),
+            status="published",
             sentiment_score=-0.35,
             anomaly_score=0.44,
             tags=["supply-chain", "ev"],

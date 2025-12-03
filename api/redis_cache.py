@@ -6,6 +6,7 @@ import json
 from typing import List, Optional
 
 import redis
+from redis.exceptions import RedisError
 
 
 class RedisSessionCache:
@@ -30,7 +31,10 @@ class RedisSessionCache:
             List of message dicts or None if not cached
         """
         key = f"chat:context:{session_id}"
-        data = self.client.get(key)
+        try:
+            data = self.client.get(key)
+        except RedisError:
+            return None
         return json.loads(data) if data else None
 
     def set_context(self, session_id: str, context: List[dict]):
@@ -41,7 +45,10 @@ class RedisSessionCache:
             context: List of message dicts to cache
         """
         key = f"chat:context:{session_id}"
-        self.client.setex(key, self.ttl, json.dumps(context))
+        try:
+            self.client.setex(key, self.ttl, json.dumps(context))
+        except RedisError:
+            return
 
     def clear_context(self, session_id: str):
         """Remove cached context for a session.
@@ -50,4 +57,7 @@ class RedisSessionCache:
             session_id: Chat session ID
         """
         key = f"chat:context:{session_id}"
-        self.client.delete(key)
+        try:
+            self.client.delete(key)
+        except RedisError:
+            return

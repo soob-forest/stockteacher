@@ -141,4 +141,4 @@ def test_analyze_core_cost_limit_marks_jobrun(tmp_path: Path, monkeypatch):
         jr = session.execute(select(JobRun).order_by(JobRun.started_at.desc())).scalars().first()
         assert jr is not None
         assert jr.status == JobStatus.FAILED
-        assert jr.error_message == "LLM 비용 제한 초과"
+        assert jr.error_message == "LLM 비용 상한 초과"

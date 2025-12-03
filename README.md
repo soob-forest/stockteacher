@@ -88,6 +88,7 @@ StockTeacher — Slack 주식 리포트 봇 (MVP)
   - `OPENAI_API_KEY`(필수), `ANALYSIS_MODEL`(기본 gpt-4o-mini), `ANALYSIS_MAX_TOKENS`(기본 512)
   - `ANALYSIS_TEMPERATURE`(기본 0.2), `DEFAULT_LOCALE`(기본 ko_KR)
   - 비용/안전: `ANALYSIS_COST_LIMIT_USD`(요청당 상한, 기본 0.02), `ANALYSIS_REQUEST_TIMEOUT_SECONDS`(기본 15), `ANALYSIS_RETRY_MAX_ATTEMPTS`(기본 2)
+  - 웹/채팅: `NEXT_PUBLIC_API_BASE_URL`(기본 `http://localhost:8000`), `NEXT_PUBLIC_WS_BASE_URL`(기본은 API_BASE를 ws/wss로 치환), `NEXT_PUBLIC_ENABLE_SSE_FALLBACK`(WebSocket 실패 안내 플래그; 기본 false, SSE 미구현)
 - 실행 예시(개발용)
   - `uv run -- python -c "from analysis.tasks.analyze import analyze_core; print(analyze_core('AAPL'))"`
 - 워커 운영

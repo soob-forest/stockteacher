@@ -9,6 +9,7 @@ import {
   updateAlertWindow,
   deleteSubscription
 } from '../../lib/api';
+import { NotificationSettings } from '../../components/NotificationSettings';
 
 type AlertOption = {
   value: string;
@@ -104,6 +105,8 @@ export default function SubscriptionsPage() {
 
   return (
     <div className="grid">
+      <NotificationSettings />
+
       <section className="card">
         <h2>구독 종목 등록</h2>
         <p className="label">

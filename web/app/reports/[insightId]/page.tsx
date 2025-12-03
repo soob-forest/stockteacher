@@ -2,17 +2,55 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ReportSummary,
   ReportDetail,
   fetchReportDetail,
   toggleFavorite,
   startChatSession,
   ChatSession,
+  updateReportStatus,
+  fetchRelatedReports
 } from '../../../lib/api';
 import { useChatWebSocket } from '../../../hooks/useChatWebSocket';
 
 type PageProps = {
   params: { insightId: string };
 };
+
+function RelatedCard({ item }: { item: ReportSummary }) {
+  const sentimentLabel =
+    item.sentiment_score > 0.2
+      ? '긍정'
+      : item.sentiment_score < -0.2
+        ? '부정'
+        : '중립';
+  return (
+    <article className="list-item">
+      <div style={{ display: 'grid', gap: '0.4rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span style={{ fontWeight: 600 }}>{item.ticker}</span>
+          <span className="badge">{sentimentLabel}</span>
+        </div>
+        <div style={{ color: '#c7cedd', fontSize: '0.9rem' }}>{item.headline}</div>
+        <div className="sentiment-meter">
+          {new Date(item.published_at).toLocaleString('ko-KR')}
+        </div>
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {item.tags.map((tag) => (
+            <span key={`${item.insight_id}-${tag}`} className="badge">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="actions">
+        <a className="button secondary" href={`/reports/${item.insight_id}`}>
+          열기
+        </a>
+      </div>
+    </article>
+  );
+}
 
 const sentimentMeter = (score: number): string => {
   if (score > 0.4) return '🙂 ██████░░';
@@ -27,13 +65,24 @@ export default function ReportDetailPage({ params }: PageProps) {
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [related, setRelated] = useState<ReportSummary[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+  const [relatedError, setRelatedError] = useState<string | null>(null);
   const [session, setSession] = useState<ChatSession | null>(null);
   const [messageDraft, setMessageDraft] = useState('');
 
   // WebSocket hook for real-time chat
-  const { messages, isConnected, error: wsError, isTyping, sendMessage } = useChatWebSocket(
-    session?.session_id || null
-  );
+  const {
+    messages,
+    isConnected,
+    error: wsError,
+    isTyping,
+    isSending,
+    latencyWarning,
+    sendMessage
+  } = useChatWebSocket(session?.session_id || null);
+  const banner = null;
 
   useEffect(() => {
     let canceled = false;
@@ -61,13 +110,53 @@ export default function ReportDetailPage({ params }: PageProps) {
 
   useEffect(() => {
     let canceled = false;
-    startChatSession(insightId)
-      .then((created) => {
+    setRelatedLoading(true);
+    fetchRelatedReports(insightId)
+      .then((items) => {
         if (!canceled) {
-          setSession(created);
+          setRelated(items);
         }
       })
-      .catch((err) => setError(err.message));
+      .catch((err) => {
+        if (!canceled) {
+          setRelatedError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!canceled) {
+          setRelatedLoading(false);
+        }
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [insightId]);
+
+  useEffect(() => {
+    let canceled = false;
+    const key = `chatSession:${insightId}`;
+    const ensureSession = async () => {
+      try {
+        const savedRaw = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+        if (savedRaw) {
+          const saved = JSON.parse(savedRaw) as ChatSession;
+          if (saved?.session_id) {
+            setSession(saved);
+            return;
+          }
+        }
+        const created = await startChatSession(insightId);
+        if (canceled) return;
+        setSession(created);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(key, JSON.stringify(created));
+        }
+      } catch (err) {
+        if (canceled) return;
+        setError(err instanceof Error ? err.message : '채팅 세션 생성에 실패했습니다.');
+      }
+    };
+    ensureSession();
     return () => {
       canceled = true;
     };
@@ -76,7 +165,9 @@ export default function ReportDetailPage({ params }: PageProps) {
   // Update error from WebSocket
   useEffect(() => {
     if (wsError) {
-      setError(wsError);
+      setChatError(wsError);
+    } else {
+      setChatError(null);
     }
   }, [wsError]);
 
@@ -96,6 +187,17 @@ export default function ReportDetailPage({ params }: PageProps) {
       setReport({ ...report, favorite: next });
     } catch (err) {
       setError(err instanceof Error ? err.message : '즐겨찾기 변경 실패');
+    }
+  }
+
+  async function handleStatusChange(next: 'published' | 'hidden'): Promise<void> {
+    if (!report) return;
+    setError(null);
+    try {
+      const updated = await updateReportStatus(report.insight_id, { status: next });
+      setReport(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '상태 변경 실패');
     }
   }
 
@@ -141,6 +243,11 @@ export default function ReportDetailPage({ params }: PageProps) {
             <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
               <h2 style={{ margin: 0 }}>{report.ticker}</h2>
               <span className="badge">{sentimentLabel}</span>
+              {report.status !== 'published' && (
+                <span className="badge secondary">
+                  {report.status === 'hidden' ? '숨김' : '대기'}
+                </span>
+              )}
             </div>
             <div className="sentiment-meter">
               {sentimentMeter(report.sentiment_score)} ·{' '}
@@ -150,7 +257,30 @@ export default function ReportDetailPage({ params }: PageProps) {
           <button className="button" type="button" onClick={handleFavorite}>
             {report.favorite ? '즐겨찾기 해제' : '즐겨찾기'}
           </button>
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() =>
+              handleStatusChange(report.status === 'hidden' ? 'published' : 'hidden')
+            }
+          >
+            {report.status === 'hidden' ? '복구(게시)' : '숨기기'}
+          </button>
         </header>
+        {report.status !== 'published' && (
+          <div
+            className="badge"
+            style={{
+              background: report.status === 'hidden' ? '#ffecec' : '#fff5d6',
+              color: report.status === 'hidden' ? '#b30000' : '#a05a00',
+              marginTop: '0.75rem'
+            }}
+          >
+            {report.status === 'hidden'
+              ? '이 리포트는 숨김 상태입니다. 사용자에게 노출되지 않습니다.'
+              : '이 리포트는 게시 대기(draft) 상태입니다.'}
+          </div>
+        )}
         <article style={{ display: 'grid', gap: '1rem', marginTop: '1.5rem' }}>
           <div>
             <span className="label">요약</span>
@@ -213,6 +343,56 @@ export default function ReportDetailPage({ params }: PageProps) {
       </section>
 
       <section className="card">
+        <header
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}
+        >
+          <h2>관련 리포트</h2>
+          {relatedLoading && <span className="badge">불러오는 중</span>}
+        </header>
+        {relatedError && (
+          <div className="badge" style={{ background: '#ffecec', color: '#b30000' }}>
+            {relatedError}
+          </div>
+        )}
+        {relatedLoading && related.length === 0 && (
+          <div className="list">
+            {[0, 1, 2].map((idx) => (
+              <div
+                key={`skeleton-${idx}`}
+                className="list-item"
+                style={{ opacity: 0.4 }}
+              >
+                <div className="badge secondary" style={{ width: '5rem' }}>
+                  로딩중
+                </div>
+                <div className="label" style={{ marginTop: '0.5rem' }}>
+                  관련 리포트를 불러오는 중입니다...
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {related.length === 0 && !relatedLoading ? (
+          <div className="empty-state">
+            관련 리포트가 없습니다.{' '}
+            <a href="/reports" className="button secondary" style={{ marginLeft: '0.5rem' }}>
+              전체 리포트 보기
+            </a>
+          </div>
+        ) : (
+          <div className="list">
+            {related.map((item) => (
+              <RelatedCard key={item.insight_id} item={item} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <h2>에이전트 대화</h2>
           <span style={{ fontSize: '0.9rem' }}>
@@ -222,6 +402,22 @@ export default function ReportDetailPage({ params }: PageProps) {
         <p className="label">
           리포트 내용을 바탕으로 후속 질문을 입력하면 에이전트가 답변합니다.
         </p>
+        {(chatError || banner) && (
+          <div
+            className="badge"
+            style={{ background: '#ffecec', color: '#b30000', marginBottom: '0.5rem' }}
+          >
+            {chatError || banner}
+          </div>
+        )}
+        {latencyWarning && !chatError && (
+          <div
+            className="badge"
+            style={{ background: '#fff5d6', color: '#a05a00', marginBottom: '0.5rem' }}
+          >
+            응답이 지연되고 있습니다. 잠시만 기다려주세요.
+          </div>
+        )}
         <div className="chat-panel">
           <div className="chat-messages">
             {messages.length === 0 ? (
@@ -229,8 +425,11 @@ export default function ReportDetailPage({ params }: PageProps) {
                 아직 메시지가 없습니다. 질문을 입력해보세요.
               </div>
             ) : (
-              messages.map((message) => (
-                <div key={message.message_id} className="chat-message">
+              messages.map((message, idx) => (
+                <div
+                  key={message.message_id || `temp-${idx}`}
+                  className="chat-message"
+                >
                   <span className="sender">{message.sender.toUpperCase()}</span>
                   <span>{message.content}</span>
                   <span className="label">
@@ -256,9 +455,11 @@ export default function ReportDetailPage({ params }: PageProps) {
               className="button"
               type="button"
               onClick={handleSend}
-              disabled={!isConnected || isTyping || messageDraft.trim().length === 0}
+              disabled={
+                !isConnected || isTyping || isSending || messageDraft.trim().length === 0
+              }
             >
-              {isTyping ? '응답 대기 중...' : '전송'}
+              {isTyping ? '응답 대기 중...' : isSending ? '전송 중...' : '전송'}
             </button>
           </div>
         </div>

@@ -1,5 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+from dotenv import load_dotenv
+
+# 프로젝트 루트의 .env 파일 명시적 로딩
+project_root = Path(__file__).parent.parent
+env_path = project_root / ".env"
+
+if env_path.exists():
+    load_dotenv(env_path)
+    print(f"✓ Loaded environment variables from {env_path}")
+else:
+    print(f"⚠ Warning: .env file not found at {env_path}")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

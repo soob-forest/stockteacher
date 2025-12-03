@@ -6,6 +6,8 @@ from typing import Any
 
 import pytest
 
+pytest.importorskip("pytest_httpx")
+
 from ingestion.connectors.news_api import NewsAPIConnector
 from ingestion.settings import reset_settings_cache
 

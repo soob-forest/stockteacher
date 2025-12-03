@@ -33,7 +33,7 @@ def _env(monkeypatch):
     monkeypatch.setenv("ANALYSIS_MAX_TOKENS", "256")
     monkeypatch.setenv("ANALYSIS_TEMPERATURE", "0.2")
     monkeypatch.setenv("ANALYSIS_REQUEST_TIMEOUT_SECONDS", "5")
-    monkeypatch.setenv("ANALYSIS_RETRY_MAX_ATTEMPTS", "1")
+    monkeypatch.setenv("ANALYSIS_RETRY_MAX_ATTEMPTS", "2")
     monkeypatch.setenv("ANALYSIS_COST_LIMIT_USD", "0.05")
     yield
     reset_analysis_settings_cache()

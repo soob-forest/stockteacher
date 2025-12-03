@@ -11,6 +11,7 @@ from api.db_models import ReportSnapshot
 from ingestion.db.models import JobStage, ProcessedInsight
 from ingestion.db.session import session_scope
 from ingestion.repositories.articles import JobRunRecorder
+from publish.notifier import dispatch_urgent_notifications, is_urgent_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ def materialize_reports(*, limit: int = 50, ticker: str | None = None) -> int:
                         headline=_derive_headline(insight.summary_text),
                         summary_text=insight.summary_text,
                         published_at=insight.generated_at,
+                        status=_infer_status(insight),
                         sentiment_score=float(insight.sentiment_score),
                         anomaly_score=_compute_anomaly_score(
                             insight.anomalies or []
@@ -78,6 +80,28 @@ def materialize_reports(*, limit: int = 50, ticker: str | None = None) -> int:
                     )
                     api_session.add(snapshot)
                     api_session.flush()
+
+                    try:
+                        dispatched = dispatch_urgent_notifications(
+                            api_session, snapshot
+                        )
+                        urgent, reason = is_urgent_snapshot(snapshot)
+                        if urgent and dispatched:
+                            logger.info(
+                                "publish.urgent_dispatched",
+                                extra={
+                                    "trace_id": trace_id,
+                                    "insight_id": insight_id,
+                                    "ticker": insight.ticker,
+                                    "recipients": len(dispatched),
+                                    "reason": reason,
+                                },
+                            )
+                    except Exception:
+                        logger.exception(
+                            "publish.urgent_dispatch_failed",
+                            extra={"trace_id": trace_id, "insight_id": insight_id},
+                        )
 
                 existing_ids.add(insight_id)
                 inserted += 1
@@ -137,3 +161,13 @@ def _derive_tags(keywords: Iterable[str], anomalies: Iterable[dict]) -> list[str
         if len(tags) >= 5:
             break
     return tags
+
+
+def _infer_status(insight: ProcessedInsight) -> str:
+    if abs(float(insight.sentiment_score)) >= 0.9:
+        return "draft"
+    if not (insight.keywords or []):
+        return "draft"
+    if not (insight.anomalies or []) and len(insight.summary_text or "") < 100:
+        return "draft"
+    return "published"

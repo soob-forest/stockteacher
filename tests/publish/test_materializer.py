@@ -13,6 +13,8 @@ def _prepare_environments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     portal_url = f"sqlite:///{tmp_path}/portal.db"
     monkeypatch.setenv("POSTGRES_DSN", ingestion_url)
     monkeypatch.setenv("DATABASE_URL", portal_url)
+    monkeypatch.setenv("INGESTION_REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("NEWS_API_KEY", "test-key")
 
     from ingestion.settings import reset_settings_cache
 

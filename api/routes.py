@@ -13,23 +13,31 @@ from .models import (
     ChatMessage,
     ChatMessageRequest,
     ChatSession,
+    NotificationPolicy,
+    NotificationPolicyUpsert,
     ReportDetail,
     ReportFilter,
     ReportSummary,
+    ReportStatusUpdate,
     Subscription,
     SubscriptionCreate,
     SubscriptionUpdate,
 )
+from .notification_constants import NOTIFICATION_TIMEZONE_PRESETS
 from .repositories import (
     add_chat_message,
     create_chat_session,
     create_subscription,
     delete_subscription,
     get_report,
+    get_notification_policy,
+    list_related_reports,
     list_chat_messages,
     list_reports,
     list_subscriptions,
+    upsert_notification_policy,
     set_favorite,
+    update_report_status,
     update_subscription,
 )
 
@@ -93,6 +101,11 @@ async def list_reports_route(
     session: SessionDep,
     user_id: Annotated[str, Depends(current_user_id)],
     date: str | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    tickers: list[str] | None = Query(default=None),
+    keywords: list[str] | None = Query(default=None),
+    urgent_only: bool | None = Query(default=None, alias="urgent_only"),
     sentiment: str | None = Query(
         default=None, pattern="^(positive|neutral|negative)$"
     ),
@@ -100,12 +113,19 @@ async def list_reports_route(
         default=None, alias="favorites_only"
     ),
     search: str | None = Query(default=None),
+    status: str | None = Query(default=None),
 ) -> list[ReportSummary]:
     filter_model = ReportFilter(
         date=datetime.fromisoformat(date) if date else None,
+        date_from=datetime.fromisoformat(date_from) if date_from else None,
+        date_to=datetime.fromisoformat(date_to) if date_to else None,
         sentiment=sentiment,
         favorites_only=favorites_only,
+        status=status,
         search=search,
+        tickers=[ticker.upper() for ticker in tickers] if tickers else None,
+        keywords=keywords if keywords else None,
+        urgent_only=urgent_only,
     )
     return list_reports(session, user_id, filter_model)
 
@@ -118,6 +138,33 @@ async def get_report_route(
 ) -> ReportDetail:
     try:
         return get_report(session, insight_id, user_id)
+    except NoResultFound as exc:
+        raise HTTPException(status_code=404, detail="Report not found.") from exc
+
+
+@router.get("/reports/{insight_id}/related", response_model=list[ReportSummary])
+async def list_related_reports_route(
+    insight_id: str,
+    user_id: Annotated[str, Depends(current_user_id)],
+    session: SessionDep,
+) -> list[ReportSummary]:
+    try:
+        return list_related_reports(session, user_id, insight_id)
+    except NoResultFound as exc:
+        raise HTTPException(status_code=404, detail="Report not found.") from exc
+
+
+@router.patch("/reports/{insight_id}/status", response_model=ReportDetail)
+async def update_report_status_route(
+    insight_id: str,
+    payload: ReportStatusUpdate,
+    user_id: Annotated[str, Depends(current_user_id)],
+    session: SessionDep,
+) -> ReportDetail:
+    if payload.status not in {"draft", "published", "hidden"}:
+        raise HTTPException(status_code=400, detail="Invalid status value.")
+    try:
+        return update_report_status(session, insight_id, payload.status, user_id)
     except NoResultFound as exc:
         raise HTTPException(status_code=404, detail="Report not found.") from exc
 
@@ -189,6 +236,28 @@ async def post_chat_message_route(
         raise HTTPException(status_code=404, detail="Chat session not found.") from exc
 
 
+@router.get("/notifications/policy", response_model=NotificationPolicy)
+async def get_notification_policy_route(
+    user_id: Annotated[str, Depends(current_user_id)],
+    session: SessionDep,
+) -> NotificationPolicy:
+    return get_notification_policy(session, user_id)
+
+
+@router.put("/notifications/policy", response_model=NotificationPolicy)
+async def upsert_notification_policy_route(
+    payload: NotificationPolicyUpsert,
+    user_id: Annotated[str, Depends(current_user_id)],
+    session: SessionDep,
+) -> NotificationPolicy:
+    return upsert_notification_policy(session, user_id, payload)
+
+
+@router.get("/notifications/timezones", response_model=list[str])
+async def list_notification_timezones_route() -> list[str]:
+    return NOTIFICATION_TIMEZONE_PRESETS
+
+
 def _ensure_subscription_owner(
     session: Session, subscription_id: str, user_id: str
 ) -> None:
@@ -214,7 +283,7 @@ async def chat_websocket(
                          {"type": "done", "message_id": "..."}
                          {"type": "error", "detail": "..."}
     """
-    from api.chat_service import get_chat_service
+    from api.chat_service import ChatServiceError, get_chat_service
     from api.websocket_manager import manager
 
     await manager.connect(session_id, websocket)
@@ -224,14 +293,14 @@ async def chat_websocket(
 
             if data.get("type") != "message":
                 await websocket.send_json(
-                    {"type": "error", "detail": "Invalid message type"}
+                    {"type": "error", "code": "invalid_type", "detail": "Invalid message type"}
                 )
                 continue
 
             user_message = data.get("content", "").strip()
             if not user_message:
                 await websocket.send_json(
-                    {"type": "error", "detail": "Empty message content"}
+                    {"type": "error", "code": "invalid_input", "detail": "Empty message content"}
                 )
                 continue
 
@@ -244,9 +313,22 @@ async def chat_websocket(
 
                 await websocket.send_json({"type": "done", "message_id": "latest"})
 
+            except ChatServiceError as exc:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "code": exc.code,
+                        "detail": exc.detail,
+                        "trace_id": exc.trace_id,
+                    }
+                )
             except Exception as exc:
                 await websocket.send_json(
-                    {"type": "error", "detail": f"Error processing message: {exc}"}
+                    {
+                        "type": "error",
+                        "code": "internal_error",
+                        "detail": "메시지 처리 중 오류가 발생했습니다.",
+                    }
                 )
 
     except WebSocketDisconnect:

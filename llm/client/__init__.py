@@ -5,6 +5,7 @@ from llm.client.openai_client import (
     OpenAIClient,
     PermanentLLMError,
     ProviderFn,
+    StreamProviderFn,
     TransientLLMError,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "OpenAIClient",
     "PermanentLLMError",
     "ProviderFn",
+    "StreamProviderFn",
     "TransientLLMError",
 ]
