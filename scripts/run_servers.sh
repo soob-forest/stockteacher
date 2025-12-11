@@ -26,12 +26,14 @@ fi
 
 start_containers() {
   if [ -z "${DOCKER_COMPOSE_CMD}" ]; then
-    echo "[run_servers] docker compose/docker-compose 명령을 찾지 못했습니다. Redis/Postgres는 수동으로 올려주세요." >&2
+    echo "[run_servers] docker compose/docker-compose 명령을 찾지 못했습니다. Redis/Postgres/Chroma는 수동으로 올려주세요." >&2
     return 0
   fi
 
-  echo "[run_servers] Redis/Postgres 컨테이너를 시작합니다..."
-  (cd "${ROOT_DIR}" && ${DOCKER_COMPOSE_CMD} up -d redis postgres)
+  echo "[run_servers] Redis/Postgres/Chroma 컨테이너를 시작합니다..."
+  (cd "${ROOT_DIR}" && ${DOCKER_COMPOSE_CMD} up -d redis postgres chroma)
+  echo "[run_servers] Chroma 초기화 스크립트를 실행합니다..."
+  (cd "${ROOT_DIR}" && ${UV_CMD} python scripts/init_chroma.py || true)
 }
 
 start_api() {

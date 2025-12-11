@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Iterable
+from typing import Iterable, Optional
 
 from sqlalchemy import (
     JSON,
@@ -130,8 +130,8 @@ class NotificationPolicy(Base):
     window: Mapped[str] = mapped_column(String(24))
     frequency: Mapped[str] = mapped_column(String(12))
     channels: Mapped[list[str]] = mapped_column(JSON, default=list)
-    quiet_hours_start: Mapped[str | None] = mapped_column(String(5), nullable=True)
-    quiet_hours_end: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    quiet_hours_start: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
+    quiet_hours_end: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now()
     )

@@ -38,7 +38,11 @@ export function ReportsBoard({
   lockFavoritesOnly = false
 }: ReportsBoardProps) {
   const [reports, setReports] = useState<ReportSummary[]>([]);
-  const [filter, setFilter] = useState<ReportFilter>(initialFilter);
+  const [filter, setFilter] = useState<ReportFilter>({
+    ...initialFilter,
+    favorites_only: lockFavoritesOnly ? true : initialFilter.favorites_only,
+    vector: initialFilter.vector ?? false
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tickersInput, setTickersInput] = useState(
@@ -47,6 +51,11 @@ export function ReportsBoard({
   const [keywordsInput, setKeywordsInput] = useState(
     (initialFilter.keywords || []).join(', ')
   );
+
+  useEffect(() => {
+    setTickersInput((filter.tickers || []).join(', '));
+    setKeywordsInput((filter.keywords || []).join(', '));
+  }, [filter.tickers, filter.keywords]);
 
   const activeBadges = useMemo(() => {
     const badges: string[] = [];
@@ -61,6 +70,7 @@ export function ReportsBoard({
     if (filter.sentiment) badges.push(`감성:${filter.sentiment}`);
     if (filter.favorites_only) badges.push('즐겨찾기');
     if (filter.urgent_only) badges.push('긴급(이상≥0.4)');
+    if (filter.vector) badges.push('벡터');
     return badges;
   }, [filter]);
 
@@ -247,6 +257,24 @@ export function ReportsBoard({
               </span>
             </label>
           )}
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            title="벡터 기반 정렬/검색을 실험적으로 활성화합니다."
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(filter.vector)}
+              onChange={(event) =>
+                setFilter((prev) => ({
+                  ...prev,
+                  vector: event.target.checked || undefined
+                }))
+              }
+            />
+            <span className="label" style={{ margin: 0 }}>
+              벡터 검색/정렬(실험)
+            </span>
+          </label>
         </div>
 
         <div className="grid two" style={{ marginTop: '0.75rem' }}>

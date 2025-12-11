@@ -3,8 +3,12 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 from typing import Any, Dict, Iterator, List
+import sys
 
 import pytest
+
+if sys.version_info < (3, 10):
+    pytest.skip("Python 3.10+ required for annotations in api.models", allow_module_level=True)
 
 from api.chat_service import ChatService, ChatServiceError
 from api.repositories import add_chat_message, create_chat_session, list_chat_messages
@@ -58,7 +62,7 @@ def api_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 async def test_handle_message_streams_and_caches(api_database):
     cache = InMemoryCache()
     client = OpenAIClient.from_env(stream_provider=_stream_provider)
-    service = ChatService(client, cache)
+    service = ChatService(client, cache, rag_enabled=False)
 
     with api_database.get_session() as session:
         chat = create_chat_session(session, "demo-user", "insight_a")
@@ -79,7 +83,7 @@ async def test_handle_message_streams_and_caches(api_database):
 @pytest.mark.asyncio
 async def test_handle_message_missing_session_raises(api_database):
     client = OpenAIClient.from_env(stream_provider=_stream_provider)
-    service = ChatService(client, InMemoryCache())
+    service = ChatService(client, InMemoryCache(), rag_enabled=False)
 
     with api_database.get_session() as session:
         with pytest.raises(ChatServiceError) as excinfo:
@@ -94,7 +98,7 @@ async def test_handle_message_cost_limit(api_database, monkeypatch: pytest.Monke
     reset_analysis_settings_cache()
 
     client = OpenAIClient.from_env(stream_provider=_stream_provider)
-    service = ChatService(client, InMemoryCache())
+    service = ChatService(client, InMemoryCache(), rag_enabled=False)
 
     with api_database.get_session() as session:
         chat = create_chat_session(session, "demo-user", "insight_a")
@@ -110,7 +114,7 @@ async def test_handle_message_cost_limit(api_database, monkeypatch: pytest.Monke
 def test_build_context_limits_history_and_caches(api_database):
     cache = InMemoryCache()
     client = OpenAIClient.from_env(stream_provider=_stream_provider)
-    service = ChatService(client, cache)
+    service = ChatService(client, cache, rag_enabled=False)
 
     with api_database.get_session() as session:
         chat = create_chat_session(session, "demo-user", "insight_a")
@@ -120,7 +124,7 @@ def test_build_context_limits_history_and_caches(api_database):
             add_chat_message(session, chat.session_id, sender, f"msg-{i}")
         session.commit()
 
-        context = service._build_context(session, chat.session_id, "trace-test")
+        context = service._build_context(session, chat.session_id, "hello", "trace-test")
         assert len(context) == 1 + 20  # system + 최근 20개
         assert context[-1]["content"] == "msg-24"
         assert cache.get_context(chat.session_id) is not None

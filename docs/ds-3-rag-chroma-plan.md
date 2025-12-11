@@ -25,18 +25,18 @@
 
 ## TODO (작업 단위)
 - 데이터 파이프라인
-  - [ ] publish 완료 후 임베딩 생성 워커 추가(ProcessedInsight 요약/키워드 기반), 실패 시 DLQ/재시도.
-  - [ ] Chroma 컬렉션 초기화 스크립트 작성(distance=cosine, collection=`reports`, dim 자동 감지).
-  - [ ] 업서트/삭제 동작(idempotent) 구현: insight_id 단위 UPSERT, 게시 롤백 시 delete 경로 포함.
-  - [ ] 임베딩/업서트 메트릭(토큰, 비용, 성공률) 로그/지표 추가.
+  - [x] publish 완료 후 임베딩 생성 워커 추가(ProcessedInsight 요약/키워드 기반), 실패 시 DLQ/재시도.
+  - [x] Chroma 컬렉션 초기화 스크립트 작성(distance=cosine, collection=`reports`, dim 자동 감지).
+  - [x] 업서트/삭제 동작(idempotent) 구현: insight_id 단위 UPSERT, 게시 롤백 시 delete 경로 포함.
+  - [x] 임베딩/업서트 메트릭(토큰, 비용, 성공률) 로그/지표 추가.
 - API
-  - [ ] `/api/search` 신설 또는 `/api/reports` 확장: query(자연어), tickers[], date_from/to, limit/offset; 질의 임베딩 → Chroma 검색 → DB fetch → 하이브리드 정렬 적용.
-  - [ ] `/api/reports/:id/related` 벡터 버전: 기준 리포트 임베딩으로 KNN, 티커 우선·키워드 보강, 최대 3개 반환; 응답 스키마에 distance/score 포함 여부 결정.
+  - [x] `/api/search` 신설 또는 `/api/reports` 확장: query(자연어), tickers[], date_from/to, limit/offset; 질의 임베딩 → Chroma 검색 → DB fetch → 하이브리드 정렬 적용.
+  - [x] `/api/reports/:id/related` 벡터 버전: 기준 리포트 임베딩으로 KNN, 티커 우선·키워드 보강, 최대 3개 반환; 응답 스키마에 distance/score 포함 여부 결정.
   - [ ] 채팅 컨텍스트 API/서비스: 메시지 임베딩 후 상위 N개 컨텍스트를 LLM 프롬프트 빌더로 전달(토큰 예산 적용).
-  - [ ] 점수 통합/하이브리드 로직 함수화(테스트 가능) 및 환경 변수로 가중치 노출.
-  - [ ] 오류/타임아웃 가드: Chroma 장애 시 키워드/티커 기반 폴백.
+  - [x] 점수 통합/하이브리드 로직 함수화(테스트 가능) 및 환경 변수로 가중치 노출.
+  - [x] 오류/타임아웃 가드: Chroma 장애 시 키워드/티커 기반 폴백.
 - 채팅 RAG
-  - [ ] 채팅 메시지 임베딩 → Chroma 검색 → 상위 N개 컨텍스트 선택(토큰 예산 내 슬라이싱) → 시스템/사용자 프롬프트 주입.
+  - [x] 채팅 메시지 임베딩 → Chroma 검색 → 상위 N개 컨텍스트 선택(토큰 예산 내 슬라이싱) → 시스템/사용자 프롬프트 주입.
   - [ ] 스트리밍 응답 경로에 컨텍스트 포함 및 비용 상한/타임아웃 유지.
   - [ ] 세션 캐시(Redis)와 RAG 결과 병합 규칙 정의 및 테스트.
 - 웹(UI)
@@ -49,9 +49,9 @@
   - [ ] 채팅 RAG: 세션 메시지 → 컨텍스트 주입 → 응답 포함 여부 모킹 테스트(LLM 호출은 모킹, Chroma는 로컬 인스턴스).
   - [ ] 부하: 벡터 검색 p95, 업서트 TPS, 채팅 동시 연결 샘플 부하 테스트 계획.
 - 설정/운영
-  - [ ] 환경 변수 정의: `CHROMA_URL`, `CHROMA_COLLECTION=reports`, `EMBEDDING_MODEL`, 가중치/상한값.
+  - [x] 환경 변수 정의: `CHROMA_URL`, `CHROMA_COLLECTION=reports`, `EMBEDDING_MODEL`, 가중치/상한값.
   - [ ] 헬스체크 및 장애 시 폴백 경로 로그/알림 설정.
-  - [ ] 피처 플래그(RAG on/off, vector 추천 on/off)로 안전 롤아웃 및 롤백 전략 마련.
+  - [x] 피처 플래그(RAG on/off, vector 추천 on/off)로 안전 롤아웃 및 롤백 전략 마련.
 
 ## 리스크 및 완화
 - 비용 상승: 임베딩 배치 간격/토큰 상한 설정, 중복 업서트 방지.

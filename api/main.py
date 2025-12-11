@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import chat_service as chat_service_module
 from .chat_service import ChatService
 from .redis_cache import RedisSessionCache
+from ingestion.services.chroma_client import default_chroma_client
 from llm.client.openai_client import OpenAIClient
 
 from .database import init_db
@@ -31,7 +32,11 @@ init_db()
 # Initialize chat service
 openai_client = OpenAIClient.from_env()
 redis_cache = RedisSessionCache()
-chat_service_module.chat_service = ChatService(openai_client, redis_cache)
+chat_service_module.chat_service = ChatService(
+    openai_client,
+    redis_cache,
+    chroma_client=default_chroma_client(),
+)
 
 app.add_middleware(
     CORSMiddleware,

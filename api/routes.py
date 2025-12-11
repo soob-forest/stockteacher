@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -40,6 +41,9 @@ from .repositories import (
     update_report_status,
     update_subscription,
 )
+from api.vector_search import SearchFilters, get_vector_search_service
+from api import db_models
+from ingestion.services.chroma_client import ChromaError
 
 router = APIRouter(prefix="/api")
 
@@ -130,6 +134,33 @@ async def list_reports_route(
     return list_reports(session, user_id, filter_model)
 
 
+@router.get("/search", response_model=list[ReportSummary])
+async def search_reports_route(
+    user_id: Annotated[str, Depends(current_user_id)],
+    session: SessionDep,
+    query: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+    tickers: list[str] | None = Query(default=None),
+    keywords: list[str] | None = Query(default=None),
+) -> list[ReportSummary]:
+    service = get_vector_search_service()
+    filters = SearchFilters(
+        tickers=[t.upper() for t in tickers] if tickers else None,
+        keywords=keywords if keywords else None,
+        limit=limit,
+    )
+    try:
+        return service.search_reports(session, query, user_id, filters)
+    except ChromaError:
+        # 폴백: 기존 리스트 검색(간단 텍스트 매칭)
+        filter_model = ReportFilter(
+            search=query,
+            tickers=filters.tickers,
+            keywords=filters.keywords,
+        )
+        return list_reports(session, user_id, filter_model)
+
+
 @router.get("/reports/{insight_id}", response_model=ReportDetail)
 async def get_report_route(
     insight_id: str,
@@ -149,6 +180,16 @@ async def list_related_reports_route(
     session: SessionDep,
 ) -> list[ReportSummary]:
     try:
+        if os.getenv("VECTOR_RELATED_ENABLED", "false").lower() == "true":
+            base_snap = session.get(db_models.ReportSnapshot, insight_id)
+            if base_snap is None:
+                raise NoResultFound
+            service = get_vector_search_service()
+            try:
+                return service.related_reports(session, base_snap, user_id, limit=3)
+            except ChromaError:
+                # 폴백: 기존 키워드 기반 로직
+                pass
         return list_related_reports(session, user_id, insight_id)
     except NoResultFound as exc:
         raise HTTPException(status_code=404, detail="Report not found.") from exc

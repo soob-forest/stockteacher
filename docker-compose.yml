@@ -29,6 +29,22 @@ services:
       retries: 10
     restart: unless-stopped
 
+  chroma:
+    image: ghcr.io/chroma-core/chroma:0.5.4
+    environment:
+      CHROMA_SERVER_HOST: "0.0.0.0"
+      CHROMA_SERVER_HTTP_PORT: "8000"
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/index
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/heartbeat || wget -qO- http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
 volumes:
   postgres_data:
-
+  chroma_data:
