@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import uuid
+import time
 from typing import AsyncIterator, Iterator, List, Optional, Callable
 
 from sqlalchemy.exc import NoResultFound
@@ -211,6 +212,10 @@ class ChatService:
             self.chroma = default_chroma_client()
         try:
             query_emb = self.embedder([user_message])[0]
+            start = time.perf_counter()
+            heartbeat = getattr(self.chroma, "heartbeat", None)
+            if callable(heartbeat):
+                heartbeat()
             raw = self.chroma.query(
                 query_embeddings=[query_emb],
                 n_results=self.rag_results,
@@ -219,7 +224,13 @@ class ChatService:
         except (ChromaError, Exception) as exc:
             self.logger.warning(
                 "chat.rag_failed",
-                extra={"trace_id": trace_id, "error": str(exc)},
+                extra={
+                    "trace_id": trace_id,
+                    "error": str(exc),
+                    "duration_ms": int((time.perf_counter() - start) * 1000)
+                    if "start" in locals()
+                    else None,
+                },
             )
             return []
 

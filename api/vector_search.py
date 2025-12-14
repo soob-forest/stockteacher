@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+import logging
+import time
 from typing import Callable, Dict, Iterable, List, Sequence
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -49,6 +52,7 @@ class VectorSearchService:
         self.embedder = embedder or (lambda texts: embed_texts(texts))
         self.ticker_weight = float(os.getenv("VECTOR_TICKER_WEIGHT", "0.2"))
         self.keyword_weight = float(os.getenv("VECTOR_KEYWORD_WEIGHT", "0.1"))
+        self.logger = logging.getLogger(__name__)
 
     def _embed(self, text: str) -> List[float]:
         return self.embedder([text])[0]
@@ -62,18 +66,28 @@ class VectorSearchService:
     ) -> list[ReportSummary]:
         text = f"{base.headline}\n{base.summary_text}"
         embedding = self._embed(text)
+        start = time.perf_counter()
 
-        raw = self.chroma.query(
-            query_embeddings=[embedding],
-            n_results=max(1, limit * 4),
-            where={"status": {"$ne": "hidden"}},
-        )
+        try:
+            self.chroma.heartbeat()
+            raw = self.chroma.query(
+                query_embeddings=[embedding],
+                n_results=max(1, limit * 4),
+                where={"status": {"$ne": "hidden"}},
+            )
+        except Exception as exc:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            self.logger.warning(
+                "vector.related.fallback",
+                extra={"trace_id": _trace_id(), "reason": str(exc), "duration_ms": duration_ms},
+            )
+            return self._fallback_related(session, base, user_id, limit)
 
         ids = raw.get("ids", [[]])[0]
         distances = raw.get("distances", [[]])[0]
         metadatas = raw.get("metadatas", [[]])[0]
         if not ids:
-            return []
+            return self._fallback_related(session, base, user_id, limit)
 
         snapshots: Sequence[db_models.ReportSnapshot] = session.scalars(
             select(db_models.ReportSnapshot).where(db_models.ReportSnapshot.insight_id.in_(ids))
@@ -128,17 +142,27 @@ class VectorSearchService:
         if filters.keywords:
             where["keywords"] = {"$contains": filters.keywords}
 
-        raw = self.chroma.query(
-            query_embeddings=[embedding],
-            n_results=max(1, filters.limit * 2),
-            where=where or None,
-        )
+        start = time.perf_counter()
+        try:
+            self.chroma.heartbeat()
+            raw = self.chroma.query(
+                query_embeddings=[embedding],
+                n_results=max(1, filters.limit * 2),
+                where=where or None,
+            )
+        except Exception as exc:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            self.logger.warning(
+                "vector.search.fallback",
+                extra={"trace_id": _trace_id(), "reason": str(exc), "duration_ms": duration_ms},
+            )
+            return self._fallback_search(session, query, user_id, filters)
 
         ids = raw.get("ids", [[]])[0]
         distances = raw.get("distances", [[]])[0]
         metadatas = raw.get("metadatas", [[]])[0]
         if not ids:
-            return []
+            return self._fallback_search(session, query, user_id, filters)
 
         snapshots: Sequence[db_models.ReportSnapshot] = session.scalars(
             select(db_models.ReportSnapshot).where(db_models.ReportSnapshot.insight_id.in_(ids))
@@ -152,6 +176,7 @@ class VectorSearchService:
             snapshot_map=snapshot_map,
             user_id=user_id,
             filters=filters,
+            session=session,
         )
 
     def _score_and_slice(
@@ -163,6 +188,7 @@ class VectorSearchService:
         snapshot_map: dict[str, db_models.ReportSnapshot],
         user_id: str,
         filters: SearchFilters,
+        session: Session,
     ) -> list[ReportSummary]:
         filter_keywords = set(k.lower() for k in (filters.keywords or []))
         results: list[tuple[float, db_models.ReportSnapshot]] = []
@@ -193,6 +219,76 @@ class VectorSearchService:
             for score, row in results[: filters.limit]
         ]
 
+    def _fallback_related(
+        self,
+        session: Session,
+        base: db_models.ReportSnapshot,
+        user_id: str,
+        limit: int,
+    ) -> list[ReportSummary]:
+        base_keywords = {kw.lower() for kw in (base.keywords or [])}
+        rows: Sequence[db_models.ReportSnapshot] = session.scalars(
+            select(db_models.ReportSnapshot)
+            .where(db_models.ReportSnapshot.insight_id != base.insight_id)
+            .where(db_models.ReportSnapshot.status != "hidden")
+            .order_by(db_models.ReportSnapshot.published_at.desc())
+            .limit(max(10, limit * 3))
+        ).unique().all()
+        scored: list[tuple[int, db_models.ReportSnapshot]] = []
+        for row in rows:
+            overlap = len(base_keywords.intersection({kw.lower() for kw in (row.keywords or [])}))
+            ticker_match = 1 if row.ticker == base.ticker else 0
+            score = overlap * 2 + ticker_match
+            if score == 0:
+                continue
+            scored.append((score, row))
+        scored.sort(key=lambda pair: (pair[0], pair[1].published_at), reverse=True)
+        favorites = set(
+            session.scalars(
+                select(db_models.FavoriteReport.insight_id).where(db_models.FavoriteReport.user_id == user_id)
+            )
+        )
+        return [
+            to_report_summary(row, row.insight_id in favorites)
+            for score, row in scored[:limit]
+        ]
+
+    def _fallback_search(
+        self,
+        session: Session,
+        query: str,
+        user_id: str,
+        filters: SearchFilters,
+    ) -> list[ReportSummary]:
+        text_like = f"%{query}%"
+        stmt = (
+            select(db_models.ReportSnapshot)
+            .where(db_models.ReportSnapshot.status != "hidden")
+            .where(
+                (db_models.ReportSnapshot.headline.ilike(text_like))
+                | (db_models.ReportSnapshot.summary_text.ilike(text_like))
+            )
+        )
+        if filters.tickers:
+            stmt = stmt.where(db_models.ReportSnapshot.ticker.in_(filters.tickers))
+
+        rows: Sequence[db_models.ReportSnapshot] = session.scalars(
+            stmt.order_by(db_models.ReportSnapshot.published_at.desc()).limit(filters.limit)
+        ).unique().all()
+        favorites = set(
+            session.scalars(
+                select(db_models.FavoriteReport.insight_id).where(db_models.FavoriteReport.user_id == user_id)
+            )
+        )
+        filtered: list[db_models.ReportSnapshot] = []
+        for row in rows:
+            if filters.keywords:
+                row_keywords = {kw.lower() for kw in (row.keywords or [])}
+                if not row_keywords.intersection({kw.lower() for kw in filters.keywords}):
+                    continue
+            filtered.append(row)
+        return [to_report_summary(row, row.insight_id in favorites) for row in filtered[: filters.limit]]
+
 
 _default_service: VectorSearchService | None = None
 
@@ -202,3 +298,7 @@ def get_vector_search_service() -> VectorSearchService:
     if _default_service is None:
         _default_service = VectorSearchService()
     return _default_service
+
+
+def _trace_id() -> str:
+    return uuid4().hex

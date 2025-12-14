@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from datetime import datetime, timezone
 from pathlib import Path
 import sys
 from typing import Any, Dict, Iterable, List
@@ -36,6 +37,11 @@ class _FakeChroma:
         return None
 
 
+class _FailChroma:
+    def heartbeat(self):
+        raise RuntimeError("chroma down")
+
+
 def _fake_embed(texts: Iterable[str]) -> List[List[float]]:
     return [[0.1, 0.2, 0.3] for _ in texts]
 
@@ -56,7 +62,7 @@ def test_vector_search_service_ranks_and_filters(tmp_path: Path, monkeypatch: py
                     ticker="TSLA",
                     headline="Battery update",
                     summary_text="news",
-                    published_at=None,
+                    published_at=datetime.now(timezone.utc),
                     status="published",
                     sentiment_score=0.1,
                     anomaly_score=0.2,
@@ -70,7 +76,7 @@ def test_vector_search_service_ranks_and_filters(tmp_path: Path, monkeypatch: py
                     ticker="MSFT",
                     headline="Cloud news",
                     summary_text="news",
-                    published_at=None,
+                    published_at=datetime.now(timezone.utc),
                     status="published",
                     sentiment_score=0.1,
                     anomaly_score=0.1,
@@ -106,6 +112,7 @@ def test_search_endpoint_uses_vector_service(monkeypatch: pytest.MonkeyPatch, tm
             return []
 
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/api.db")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-123")
     api_main = importlib.reload(importlib.import_module("api.main"))
     # 의존성 주입
     import api.vector_search as vector_search
@@ -117,3 +124,57 @@ def test_search_endpoint_uses_vector_service(monkeypatch: pytest.MonkeyPatch, tm
     resp = client.get("/api/search", params={"query": "test"})
     assert resp.status_code == 200
     assert fake_result
+
+
+def test_vector_search_service_falls_back_on_chroma_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db_url = f"sqlite:///{tmp_path}/vec_fallback.db"
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    api_db = importlib.reload(importlib.import_module("api.database"))
+    api_db.init_db()
+
+    from api.db_models import ReportSnapshot
+
+    with api_db.get_session() as session:
+        session.add_all(
+            [
+                ReportSnapshot(
+                    insight_id="b1",
+                    ticker="AAPL",
+                    headline="AI launch",
+                    summary_text="apple ai event",
+                    published_at=datetime.now(timezone.utc),
+                    status="published",
+                    sentiment_score=0.2,
+                    anomaly_score=0.1,
+                    tags=["ai"],
+                    keywords=["ai", "event"],
+                    source_refs=[],
+                    attachments=[],
+                ),
+                ReportSnapshot(
+                    insight_id="b2",
+                    ticker="MSFT",
+                    headline="Cloud update",
+                    summary_text="cloud news",
+                    published_at=datetime.now(timezone.utc),
+                    status="published",
+                    sentiment_score=0.1,
+                    anomaly_score=0.1,
+                    tags=["cloud"],
+                    keywords=["cloud"],
+                    source_refs=[],
+                    attachments=[],
+                ),
+            ]
+        )
+        session.commit()
+
+    vec_module = importlib.reload(importlib.import_module("api.vector_search"))
+    service = vec_module.VectorSearchService(chroma_client=_FailChroma(), embedder=_fake_embed)
+    filters = vec_module.SearchFilters(tickers=["AAPL"], keywords=["ai"], limit=5)
+
+    with api_db.get_session() as session:
+        results = service.search_reports(session, "ai", "demo-user", filters)
+
+    assert len(results) == 1
+    assert results[0].insight_id == "b1"

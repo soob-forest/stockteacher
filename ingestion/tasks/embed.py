@@ -65,13 +65,24 @@ def embed_reports_core(limit: int = 50) -> int:
             logger.error("embed.failed", extra={"trace_id": trace_id, "error": str(exc)})
             raise
 
-        client.heartbeat()
-        client.ensure_collection()
-        client.upsert(
-            ids=[row.insight_id for row in rows],
-            embeddings=embeddings,
-            metadatas=[_snapshot_metadata(row) for row in rows],
-        )
+        try:
+            client.heartbeat()
+            client.ensure_collection()
+            client.upsert(
+                ids=[row.insight_id for row in rows],
+                embeddings=embeddings,
+                metadatas=[_snapshot_metadata(row) for row in rows],
+            )
+        except Exception as exc:
+            logger.error(
+                "embed.chroma_failed",
+                extra={
+                    "trace_id": trace_id,
+                    "error": str(exc),
+                    "count": len(rows),
+                },
+            )
+            raise
 
         hidden_ids = [
             snap.insight_id

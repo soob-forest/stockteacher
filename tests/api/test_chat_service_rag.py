@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib
+import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List
 import sys
@@ -39,6 +41,14 @@ class _FakeChroma:
         }
 
 
+class _FailChroma:
+    def heartbeat(self):
+        raise RuntimeError("chroma down")
+
+    def query(self, *, query_embeddings, n_results, where=None):
+        raise RuntimeError("unreachable")
+
+
 def _stream_provider(_: Dict[str, Any]) -> Iterator[Dict[str, Any]]:
     yield {"choices": [{"delta": {"content": "ok"}}]}
 
@@ -66,8 +76,7 @@ def api_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return api_database
 
 
-@pytest.mark.asyncio
-async def test_handle_message_includes_rag_context(api_database):
+def test_handle_message_includes_rag_context(api_database):
     cache = InMemoryCache()
     client = OpenAIClient.from_env(stream_provider=_stream_provider)
     service = ChatService(
@@ -84,12 +93,46 @@ async def test_handle_message_includes_rag_context(api_database):
         chat = create_chat_session(session, "demo-user", "insight_a")
         session.commit()
 
-        chunks: List[str] = []
-        async for chunk in service.handle_message(session, chat.session_id, "안녕?"):
-            chunks.append(chunk)
+        async def _run() -> List[str]:
+            chunks: List[str] = []
+            async for chunk in service.handle_message(session, chat.session_id, "안녕?"):
+                chunks.append(chunk)
+            return chunks
 
+        chunks = asyncio.run(_run())
         assert "".join(chunks) == "ok"
         cached = cache.get_context(chat.session_id)
         assert cached is not None
         # 시스템 컨텍스트 + RAG 컨텍스트 + 히스토리 2개(사용자/에이전트)
         assert any("context summary" in msg["content"] for msg in cached if msg["role"] == "system")
+
+
+def test_handle_message_falls_back_when_chroma_down(api_database):
+    cache = InMemoryCache()
+    client = OpenAIClient.from_env(stream_provider=_stream_provider)
+    service = ChatService(
+        client,
+        cache,
+        chroma_client=_FailChroma(),
+        embedder=lambda texts: [[0.1, 0.2, 0.3] for _ in texts],
+        rag_enabled=True,
+        rag_results=2,
+        rag_max_chars=500,
+    )
+
+    with api_database.get_session() as session:
+        chat = create_chat_session(session, "demo-user", "insight_b")
+        session.commit()
+
+        async def _run() -> List[str]:
+            chunks: List[str] = []
+            async for chunk in service.handle_message(session, chat.session_id, "안녕?"):
+                chunks.append(chunk)
+            return chunks
+
+        chunks = asyncio.run(_run())
+        assert "".join(chunks) == "ok"
+        cached = cache.get_context(chat.session_id)
+        assert cached is not None
+        # RAG 실패 시에도 기본 시스템 메시지와 히스토리는 저장된다.
+        assert any(msg["role"] == "system" for msg in cached)
